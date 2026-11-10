@@ -246,7 +246,7 @@ function person(c, x, y, ph, o) {
   c.lineWidth = 1.2; c.fillStyle = '#121212'; c.beginPath(); c.moveTo(tx, ty); c.quadraticCurveTo(tx - 3 + wv * 0.3, ty + 6, tx - 4 + wv * 0.5, ty + 12); c.moveTo(tx + 1, ty); c.quadraticCurveTo(tx - 1 + wv * 0.3, ty + 6, tx - 1.5 + wv * 0.5, ty + 13); c.stroke();
   c.beginPath(); c.arc(tx - 4 + wv * 0.5, ty + 12.5, 1.1, 0, TAU); c.arc(tx - 1.5 + wv * 0.5, ty + 13.5, 1.1, 0, TAU); c.fill();
   c.restore();
-  c.save(); c.translate(2, -41); limb(c, o.arm === 'wave' ? -1.42 + Math.sin(ph * 2) * 0.22 : o.arm === 'hips' ? -0.5 : -0.1, 15, 6, robe, hand(skin)); // 'wave': pointing out at the dunes c.restore();
+  c.save(); c.translate(2, -41); limb(c, o.arm === 'wave' ? -1.42 + Math.sin(ph * 2) * 0.22 : o.arm === 'hips' ? -0.5 : -0.1, 15, 6, robe, hand(skin)); c.restore(); // 'wave': pointing out at the dunes
   c.restore();
 }
 const ABOOD = { s: 1, skin: '#c98b5a', skinD: '#a8704a', skinL: '#e0a978', robe: '#fbfaf4', robeD: '#dcd8cb', scarf: SHEMAGH, fringe: '#fff1e8', flap: 1.2, hs: 1.16, bigEyes: 1, agalTilt: -0.08 };
@@ -648,6 +648,7 @@ function puff(x, y, vx, vy, n, big) { for (let i = 0; i < n && parts.length < 11
 // level rises), levels from experience, and timed races between places with bronze, silver and gold times.
 const UPS = ['engine', 'tyres', 'balance', 'tank', 'magnet'], UP_COST = [100, 250, 500, 900, 1500];
 const xpNeed = l => 80 + l * 45, RANKS = [1, 3, 6, 10, 15];
+const CH_WIN = 3.2, CH_MAX = 5, CH_MIN = 15; // combo: seconds to land the next stunt, the top multiplier, and the smallest stunt that counts
 const rankOf = l => { let r = 0; for (let i = 0; i < RANKS.length; i++) if (l >= RANKS[i]) r = i; return r; };
 const dayKey = (d = new Date()) => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
 const fmtTime = s => Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60).toFixed(1);
@@ -657,7 +658,7 @@ function addXP(n) {
 }
 function newMission() {
   const L = save.lvl, have = save.missions.map(m => m.t), r1 = x => Math.round(x * 10) / 10;
-  const t = pick(['dates', 'dist', 'air', 'jump', 'visit', 'noroll', 'cans', 'deliver', 'summit', 'tdates', 'tdist', 'drift', 'two', 'flip', 'spin', 'stunt'].filter(k => !have.includes(k))), m = { t, n: 1, p: 0 }; let w = 1;
+  const t = pick(['dates', 'dist', 'air', 'jump', 'visit', 'noroll', 'cans', 'deliver', 'summit', 'tdates', 'tdist', 'drift', 'two', 'flip', 'spin', 'stunt', 'combo'].filter(k => !have.includes(k))), m = { t, n: 1, p: 0 }; let w = 1;
   if (t === 'dates') m.n = Math.min(90, 15 + L * 5);
   else if (t === 'dist') m.n = Math.min(4500, 600 + L * 200);
   else if (t === 'air') { m.n = Math.min(12, r1(2 + L * 0.5)); w = 1.2; }
@@ -672,6 +673,7 @@ function newMission() {
   else if (t === 'flip') { m.n = Math.min(4, 1 + (L / 5 | 0)); w = 1.5; }
   else if (t === 'spin') { m.n = Math.min(5, 1 + (L / 4 | 0)); w = 1.3; }
   else if (t === 'stunt') { m.n = Math.min(6000, 400 + L * 150); w = 1.2; }
+  else if (t === 'combo') { m.n = Math.min(CH_MAX, 2 + (L / 3 | 0)); w = 1.3; }
   else if (t === 'tdates') { m.n = 80 + L * 30; w = 1.4; }
   else { m.n = 3000 + L * 600; w = 1.4; }
   m.rw = Math.round((25 + L * 5) * w / 5) * 5; m.xp = Math.round(40 * w); return m;
@@ -692,6 +694,7 @@ function mProg(m) { // how far a mission has got, counting the run in progress
     case 'flip': return on ? run.flips : 0;
     case 'spin': return on ? run.spins : 0;
     case 'stunt': return on ? run.stunt : 0;
+    case 'combo': return on ? run.combo : 0;
     case 'deliver': { if (!on) return 0; const i = run.vis.indexOf(m.a); return i < 0 ? 0 : run.vis.indexOf(m.b, i + 1) >= 0 ? 2 : 1; }
     case 'summit': return on && run.seen.moreeb ? 1 : 0;
     case 'tdates': return m.p + (on ? run.dates : 0);
@@ -734,12 +737,20 @@ function finishRace() {
 // ---------- stunts ----------
 // Drift: the back steps out and the car slides sideways under power. Two wheels: lean far enough on a slope or in a
 // fast turn and one side lifts; hold it there without going over. In the air: spins and flips, landed on the wheels.
-function stunt(pts, label) { pts = Math.round(pts); if (pts <= 0) return; run.stunt += pts; float(car.x, car.y - 125, label + ' +' + pts, '#ffe07a'); play('date', 0.75, 1.2); }
+// Combo: a stunt landed within CH_WIN seconds of the last one is worth x2, the next x3, up to CH_MAX. The clock waits while a
+// stunt is under way, and a roll sends the multiplier back to the start. Points are banked at once, so a roll never takes them back.
+function stunt(pts, label) {
+  pts = Math.round(pts); if (pts <= 0) return;
+  const counts = pts >= CH_MIN, m = counts ? Math.min(CH_MAX, run.chain + 1) : 1, total = pts * m;
+  if (counts) { run.chain = Math.min(CH_MAX, run.chain + 1); run.chainT = CH_WIN; if (m > run.combo) run.combo = m; }
+  run.stunt += total; float(car.x, car.y - 125, label + ' +' + total + (m > 1 ? ' ×' + m : ''), m > 1 ? '#ffb84a' : '#ffe07a'); play('date', 0.75 + (m - 1) * 0.09, 1.2); if (m > 1) buzz(15);
+}
 function endDrift() { if (!car.drift) return; car.drift = false; if (car.dsc > 20) { run.drift += car.dsc; stunt(car.dsc, T('st_drift')); } car.dsc = 0; }
 function endTwo() { if (car.twoT > 0.4) stunt(car.twoT * 70, T('st_two', car.twoT.toFixed(1))); car.twoT = 0; }
 function startRoll(dx, dy) { // the car goes over and tumbles in the direction (dx, dy)
   endDrift(); car.twoT = 0;
   const m = Math.hypot(dx, dy) || 1; car.roll = 1; car.rollT = 0; car.rdx = dx / m; car.rdy = dy / m; car.rside = car.rdy * Math.cos(car.ang) - car.rdx * Math.sin(car.ang) < 0 ? -1 : 1; car.air = false; car.tip = 0; car.fp = car.fy = 0;
+  if (run.chain > 1) float(car.x, car.y - 85, T('comboLost'), '#ffd9d0'); run.chain = 0;
   run.rolls++; run.nr = 0; if (!run.race) run.fuel -= 4; shake = 12; buzz(120); play('smash'); puff(car.x, car.y, 0, 0, 14, true);
   float(car.x, car.y - 40, T('rolled'), '#ffd9d0'); note(pick(T('baba')), 'baba', 2.6);
 }
@@ -823,6 +834,7 @@ function update(dt) {
       car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 27 : -27, a = tracks[s]; a.push(car.x - cs * 34 - sn * w, car.y - sn * 34 + cs * w); if (a.length > 520) a.splice(0, 2); } }
     }
   }
+  if (run.chain && !car.air && !car.drift && car.twoT <= 0 && (run.chainT -= dt) <= 0) run.chain = 0; // the combo clock runs only between stunts
   if ((car.air || car.roll) && tracks[0].length && !isNaN(tracks[0][tracks[0].length - 1])) { tracks[0].push(NaN, NaN); tracks[1].push(NaN, NaN); } // break the tyre marks
   // the rim of the reserve turns the buggy back
   const d = Math.hypot(car.x, car.y);
@@ -884,6 +896,11 @@ function drawCar(c) {
     speed: f, lat: l, t, air: car.air && car.airT > 0.12, mouth: car.air || car.roll || car.tip > 0.35 ? 'o' : '', col });
   const live = car.drift && car.dsc > 12 ? T('st_drift') + ' ' + Math.round(car.dsc) : car.twoT > 0.25 ? T('st_two', car.twoT.toFixed(1)) : ''; // the stunt in progress, counted above the car
   if (live) { c.font = '800 22px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.lineWidth = 5; c.strokeStyle = INK; c.strokeText(live, car.x, car.y - 150); c.fillStyle = '#ffe07a'; c.fillText(live, car.x, car.y - 150); }
+  if (run.live && run.chain > 0 && !car.roll) { // the combo: what the next stunt is multiplied by, and the time left to land it
+    const m = Math.min(CH_MAX, run.chain + 1), y = car.y + 76, top = m >= CH_MAX;
+    c.font = '800 28px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.lineWidth = 5; c.strokeStyle = INK; c.strokeText('×' + m, car.x, y); c.fillStyle = top ? '#ff8a3c' : '#ffe07a'; c.fillText('×' + m, car.x, y);
+    c.fillStyle = INK; c.beginPath(); c.roundRect(car.x - 33, y + 6, 66, 9, 4.5); c.fill(); c.fillStyle = top ? '#ff8a3c' : '#ffe07a'; c.beginPath(); c.roundRect(car.x - 31, y + 8, 62 * clamp(run.chainT / CH_WIN, 0, 1), 5, 2.5); c.fill();
+  }
   if (car.tip > 0.7 && !car.roll) { c.fillStyle = SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 4; c.font = '800 32px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.strokeText('!', car.x, car.y - 122); c.fillText('!', car.x, car.y - 122); }
 }
 function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under everything else
@@ -1017,7 +1034,7 @@ function showMenu() {
 function startRun(rc) { // rc: a race to drive, or nothing for a free safari
   unlockAudio(); st = 'play'; resetCar(); for (const o of DATES) o.off = false; for (const o of CANS) o.off = false;
   const u = save.up; Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine), grip: GRIP + 0.45 * u.tyres, rr: RR - 2.5 * u.tyres, tip: TIP + 0.022 * u.balance, pick: (41 + 13 * u.magnet) ** 2 });
-  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
+  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
   $('distLbl').textContent = rc ? '' : T('m'); $('dateLbl').textContent = rc ? T('cp') : T('dates'); show('fuelBox', !rc);
@@ -1044,7 +1061,7 @@ async function endRun(early) {
   $('sDist').textContent = nf(m); $('sAir').textContent = air.toFixed(1); $('sBest').textContent = nf(save.best);
   $('swDates').textContent = nf(run.dates); $('swCoins').textContent = '+' + nf(total);
   $('swPartS').textContent = T('partS', run.dates, cS); $('swPartD').textContent = T('partD', m, cD); $('swPartA').textContent = T('partA', run.stunt, cA);
-  const extra = []; if (dn && dn.gain) extra.push(T('overMedal', dn.gain)); if (dn && dn.isBest) extra.push(T('overBestTime')); if (run.mdone) extra.push(T('overMis', run.mdone, run.mcoins)); if (run.lvlUp) extra.push(T('overLvl', run.lvlUp));
+  const extra = []; if (dn && dn.gain) extra.push(T('overMedal', dn.gain)); if (dn && dn.isBest) extra.push(T('overBestTime')); if (run.mdone) extra.push(T('overMis', run.mdone, run.mcoins)); if (run.combo > 1) extra.push(T('overCombo', run.combo)); if (run.lvlUp) extra.push(T('overLvl', run.lvlUp));
   if (run.cards.length) extra.push(T('overCards', run.cards.map(id => T('s_' + id)).join(getLang() === 'ar' ? '، ' : ', ')));
   const oc = $('overCards'); oc.hidden = !extra.length; oc.textContent = extra.join(' · ');
   const ic = $('swDateIc').getContext('2d'); ic.setTransform(1, 0, 0, 1, 0, 0); ic.clearRect(0, 0, 64, 64); ic.setTransform(2.6, 0, 0, 2.6, 32, 34); aDate(ic);
