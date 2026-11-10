@@ -33,13 +33,27 @@ The reserve is a circle 6.8 km of pixels across, ringed by red flags. A round ma
 
 Camels and oryx wander near home and trot away from a fast car.
 
+## Missions, levels and races
+
+What keeps a run worth starting once every postcard is found:
+
+- **Missions:** three at a time, shown in the HUD. Each finished mission is replaced by a new one, and targets grow with your level. Eleven kinds: dates, distance, air time, one long jump, places visited, distance without rolling, jerrycans, a delivery between two places, the Tal Moreeb summit, and two that add up over several runs.
+- **Levels:** missions, postcards, races and every run give experience. Each level pays dirhams, unlocks races, and moves you up five ranks from Beginner to Desert falcon.
+- **Races:** drive through places in order against the clock for bronze, silver and gold. Five fixed races unlock by level, and a race of the day changes daily. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
+- **Daily gift:** dirhams for the first visit each day, growing over seven days in a row.
+- **Upgrades:** engine, tyres, balance, tank and date basket, five levels each (100, 250, 500, 900, 1,500).
+
+## Animals
+
+Drawn from the real animals of the Liwa sands: the dromedary with its rope halter, the Arabian oryx (white coat, brown legs, black face stripes, long ringed horns), the Arabian sand gazelle or reem, which bolts when the car comes near, and a hooded hunting falcon on its block.
+
 ## Economy
 
 In-game dirhams only; there are no real payments. Progress is saved on the device.
 
 - **End of run:** 10 dates = 1 dirham, plus 1 per 250 m driven, plus 1 per second in the air.
 - **Postcards:** 10 to 58 dirhams each, once, more for places far from the camp.
-- **Garage:** five car colours (white is free; 150, 300, 500, 1,000) and three bigger-tank levels (200, 500, 1,000), each adding 15% fuel.
+- **Garage:** five car colours (white is free; 150, 300, 500, 1,000) and the five upgrades.
 
 ## How it is built
 
