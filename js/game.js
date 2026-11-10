@@ -16,13 +16,13 @@ const coarse = matchMedia('(pointer: coarse)').matches;
 
 // ---------- save data ----------
 const SAVE_KEY = 'abood-liwa-v1';
-const save = { coins: 0, best: 0, cards: [], color: 'red', colors: ['red'], tank: 0, muted: false, runs: 0 };
+const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], tank: 0, muted: false, runs: 0 };
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
-const COLORS = {
-  red: { main: SHEMAGH, dark: '#8e141d', trim: '#fffaf0', cost: 0 }, teal: { main: '#1f7a74', dark: '#145651', trim: '#fffaf0', cost: 150 },
-  yellow: { main: '#f2c230', dark: '#b98a12', trim: '#2b1a12', cost: 300 }, white: { main: '#f4f1e8', dark: '#c9c3b2', trim: SHEMAGH, cost: 500 },
-  black: { main: '#2a2623', dark: '#121010', trim: '#e0a72a', cost: 1000 },
+const COLORS = { // white first: the classic desert car, and Abood's red shemagh stands out against it
+  white: { main: '#fbf9f2', dark: '#8f887a', trim: SHEMAGH, cost: 0 }, teal: { main: '#1f7a74', dark: '#123f3c', trim: '#fffaf0', cost: 150 },
+  yellow: { main: '#f2c230', dark: '#7a5a12', trim: '#2b1a12', cost: 300 }, red: { main: SHEMAGH, dark: '#6e1118', trim: '#fffaf0', cost: 500 },
+  black: { main: '#2f2b28', dark: '#151312', trim: '#e0a72a', cost: 1000 },
 };
 const TANK_COST = [200, 500, 1000], TANK_STEP = 15;
 
@@ -251,46 +251,156 @@ function person(c, x, y, ph, o) {
 }
 const ABOOD = { s: 1, skin: '#c98b5a', skinD: '#a8704a', skinL: '#e0a978', robe: '#fbfaf4', robeD: '#dcd8cb', scarf: SHEMAGH, fringe: '#fff1e8', flap: 1.2, hs: 1.16, bigEyes: 1, agalTilt: -0.08 };
 const BABA = { s: 1.38, skin: '#b97a4c', skinD: '#956039', skinL: '#cf9465', scarf: '#f4f3ee', fringe: '#dcd8cc', beard: 1, belly: 4, messy: 1, agalTilt: 0.32, agalY: -1, flap: 1.8, droop: 6, mouth: 'talk', arm: 'hips' };
-function drawAvatar(cnv, ph, mood) {
-  const c = cnv.getContext('2d'), S = cnv.width, sc = S / 100;
+function drawAvatar(cnv, ph, mood) { // the menu card: Abood in his car, turning slowly so you see him and the car from each side
+  const c = cnv.getContext('2d'), S = cnv.width;
   c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, S, S);
-  c.fillStyle = '#e3ad68'; c.strokeStyle = INK; c.lineWidth = 1.6 * sc; c.beginPath(); c.moveTo(-5, S * 0.86); c.quadraticCurveTo(S * 0.3, S * 0.74, S * 0.62, S * 0.86); c.quadraticCurveTo(S * 0.85, S * 0.93, S + 5, S * 0.8); c.lineTo(S + 5, S + 5); c.lineTo(-5, S + 5); c.closePath(); c.fill(); c.stroke();
-  c.fillStyle = 'rgba(43,26,18,.16)'; c.beginPath(); c.ellipse(S / 2, S * 0.9, S * 0.2, S * 0.03, 0, 0, TAU); c.fill();
-  c.save(); c.translate(S / 2 + 6 * sc, S * 0.9); c.scale(sc, sc); person(c, 0, 0, ph, Object.assign({}, ABOOD, { mouth: mood || 'grin', arm: 'wave' })); c.restore();
+  c.fillStyle = '#e3ad68'; c.strokeStyle = INK; c.lineWidth = S / 62; c.beginPath(); c.moveTo(-5, S * 0.74); c.quadraticCurveTo(S * 0.3, S * 0.62, S * 0.62, S * 0.72); c.quadraticCurveTo(S * 0.85, S * 0.79, S + 5, S * 0.68); c.lineTo(S + 5, S + 5); c.lineTo(-5, S + 5); c.closePath(); c.fill(); c.stroke();
+  const a = Math.PI / 2 + Math.sin(ph * 0.11) * 1.05;
+  c.fillStyle = 'rgba(43,26,18,.2)'; c.beginPath(); c.ellipse(S / 2 + S * 0.02, S * 0.86, S * 0.3, S * 0.1, 0, 0, TAU); c.fill();
+  drawCar3D(c, S / 2, S * 0.84, S / 300 * 1.72, { ang: a, steer: Math.cos(ph * 0.11) * 0.7, spin: ph * 0.6, speed: 150, t: ph * 0.2, mouth: mood === 'o' ? 'o' : '', col: COLORS[save.color] || COLORS.white });
 }
 
-// ---------- art: the buggy, seen from above, facing right ----------
-function drawBuggy(c, col, steer, roll, flagX, flagY) {
-  const k = Math.cos(roll);
-  c.save(); c.scale(1, Math.max(0.14, Math.abs(k))); c.lineJoin = 'round'; c.lineCap = 'round'; c.strokeStyle = INK; c.lineWidth = 1.8;
-  for (const [wx, wy, front] of [[-17, -15, 0], [-17, 15, 0], [18, -15, 1], [18, 15, 1]]) {
-    c.save(); c.translate(wx, wy); if (front) c.rotate(steer * 0.45); c.fillStyle = '#2a2623'; c.beginPath(); c.roundRect(-8.5, -5.5, 17, 11, 3.5); c.fill(); c.stroke();
-    c.strokeStyle = '#5a534d'; c.lineWidth = 1.2; c.beginPath(); for (let i = -4; i <= 4; i += 4) { c.moveTo(i, -4); c.lineTo(i, 4); } c.stroke(); c.restore(); c.strokeStyle = INK; c.lineWidth = 1.8;
+// ---------- art: the car, a small 3D model drawn in code ----------
+// The car is built from boxes, cylinders and lines in its own space (x forward, y right, z up), turned by its
+// heading and by the slope under it, then drawn back to front. So it turns smoothly, tilts on the dunes,
+// and Abood is seen at the wheel from every side.
+const CS = 1.35, ZS = 0.85, VN = Math.hypot(ZS, 1), VY = ZS / VN, VZ = 1 / VN; // model scale; how far "up" moves a point up the screen; the direction to the viewer
+const SUNX = -0.45, SUNY = -0.5, SUNZ = 0.74, EC = 0.819, ES = 0.574;          // the sun; the head is drawn as if seen from 35 degrees up, so the face shows
+const shadeCache = new Map();
+function shade(hex, f) {
+  const q = Math.round(clamp(f, 0, 1.12) * 16), key = hex + q; let s = shadeCache.get(key);
+  if (!s) { const n = parseInt(hex.slice(1), 16), k = q / 16; s = `rgb(${Math.min(255, (n >> 16) * k | 0)},${Math.min(255, (n >> 8 & 255) * k | 0)},${Math.min(255, (n & 255) * k | 0)})`; shadeCache.set(key, s); }
+  return s;
+}
+function mFace(out, pts, col, cx, cy, cz, o) { // a flat polygon whose outside is the side facing away from (cx,cy,cz)
+  const ax = pts[3] - pts[0], ay = pts[4] - pts[1], az = pts[5] - pts[2], bx = pts[6] - pts[0], by = pts[7] - pts[1], bz = pts[8] - pts[2];
+  let nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx; const l = Math.hypot(nx, ny, nz) || 1, n = pts.length / 3; nx /= l; ny /= l; nz /= l;
+  let mx = 0, my = 0, mz = 0; for (let i = 0; i < pts.length; i += 3) { mx += pts[i]; my += pts[i + 1]; mz += pts[i + 2]; } mx /= n; my /= n; mz /= n;
+  if (nx * (mx - cx) + ny * (my - cy) + nz * (mz - cz) < 0) { nx = -nx; ny = -ny; nz = -nz; }
+  const it = { k: 'f', m: pts, n: [nx, ny, nz], c: [mx, my, mz], col }; if (o) Object.assign(it, o); out.push(it); return it;
+}
+function mHull(out, b, t, col, o) { // a box, or a tapered box: bottom and top rectangles as [x0, x1, y0, y1, z]
+  const P = (r, i, j) => [i ? r[1] : r[0], j ? r[3] : r[2], r[4]], v = [P(b, 0, 0), P(b, 1, 0), P(b, 1, 1), P(b, 0, 1), P(t, 0, 0), P(t, 1, 0), P(t, 1, 1), P(t, 0, 1)];
+  const cx = (b[0] + b[1] + t[0] + t[1]) / 4, cy = (b[2] + b[3] + t[2] + t[3]) / 4, cz = (b[4] + t[4]) / 2;
+  for (const q of [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]) mFace(out, q.flatMap(i => v[i]), col, cx, cy, cz, o);
+}
+function mCyl(out, c, a, u, v, r, w, n, colSide, colCap) { // a wheel: centre, axle direction, and two directions across it
+  const ring = s => { const p = []; for (let i = 0; i < n; i++) { const an = i / n * TAU, cs = Math.cos(an) * r, sn = Math.sin(an) * r; p.push(c[0] + a[0] * s + u[0] * cs + v[0] * sn, c[1] + a[1] * s + u[1] * cs + v[1] * sn, c[2] + a[2] * s + u[2] * cs + v[2] * sn); } return p; };
+  const r0 = ring(-w / 2), r1 = ring(w / 2);
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; mFace(out, [r0[i * 3], r0[i * 3 + 1], r0[i * 3 + 2], r0[j * 3], r0[j * 3 + 1], r0[j * 3 + 2], r1[j * 3], r1[j * 3 + 1], r1[j * 3 + 2], r1[i * 3], r1[i * 3 + 1], r1[i * 3 + 2]], colSide, c[0], c[1], c[2], { ink: '#0e0c0b', iw: 0.9 }); }
+  mFace(out, r0, colCap, c[0], c[1], c[2]); mFace(out, r1, colCap, c[0], c[1], c[2]);
+}
+function mLine(out, pts, col, w, o) {
+  let mx = 0, my = 0, mz = 0; const n = pts.length / 3; for (let i = 0; i < pts.length; i += 3) { mx += pts[i]; my += pts[i + 1]; mz += pts[i + 2]; }
+  const it = { k: 'l', m: pts, c: [mx / n, my / n, mz / n], col, w }; if (o) Object.assign(it, o); out.push(it);
+}
+const WHEELS = [[-25, -20, 0], [-25, 20, 0], [25, -20, 1], [25, 20, 1]], TYRE = '#2a2623', STEEL = '#2f2a27';
+function buildCar() { // the parts that never move
+  const M = [];
+  mHull(M, [-34, 30, -13, 13, 8], [-36, 33, -15, 15, 20], 'main');                                   // the tub
+  mHull(M, [8, 33, -15, 15, 20], [11, 30, -12, 12, 26], 'main');                                     // bonnet
+  mFace(M, [12, -3, 26.2, 29.5, -3, 26.2, 29.5, 3, 26.2, 12, 3, 26.2], 'trim', 20, 0, 0, { b: 0.6, noInk: 1 }); // racing stripe
+  mHull(M, [-36, -16, -15, 15, 20], [-35, -17, -14, 14, 25], 'main');                                // rear deck
+  mFace(M, [-16, -12.5, 20.2, 8, -12.5, 20.2, 8, 12.5, 20.2, -16, 12.5, 20.2], '#3a322c', 0, 0, 0, { b: 0.4 }); // cockpit floor
+  mHull(M, [-16, 8, -15, -13, 20], [-16, 8, -15, -13, 27], 'main'); mHull(M, [-16, 8, 13, 15, 20], [-16, 8, 13, 15, 27], 'main'); // doors
+  mHull(M, [6, 9, -13, 13, 20], [6, 9, -13, 13, 28], 'dark');                                        // dashboard
+  mHull(M, [-17, -12.5, -9.5, 9.5, 20], [-18, -13.5, -9.5, 9.5, 36], '#4a4440');                     // seat back
+  for (const sg of [-1, 1]) {
+    mHull(M, [33, 34.6, sg * 9 - 3, sg * 9 + 3, 20.5], [33, 34.6, sg * 9 - 3, sg * 9 + 3, 25], '#fff3c4', { raw: 1 });   // headlights
+    mHull(M, [-36.6, -35.5, sg * 10 - 2.5, sg * 10 + 2.5, 21], [-36.6, -35.5, sg * 10 - 2.5, sg * 10 + 2.5, 24], '#e8112d', { raw: 1 }); // tail lights
+    for (const wx of [-25, 25]) { const y0 = sg > 0 ? 15 : -26, y1 = sg > 0 ? 26 : -15; mHull(M, [wx - 14, wx + 14, y0, y1, 25.6], [wx - 11, wx + 11, y0, y1, 27.4], 'main'); } // mudguards
   }
-  if (k < 0) { // rolled over: the underside
-    c.fillStyle = '#4a4440'; c.beginPath(); c.roundRect(-25, -11, 51, 22, 6); c.fill(); c.stroke();
-    c.strokeStyle = '#2a2623'; c.lineWidth = 3; c.beginPath(); c.moveTo(-17, -12); c.lineTo(-17, 12); c.moveTo(18, -12); c.lineTo(18, 12); c.moveTo(-17, 0); c.lineTo(18, 0); c.stroke();
-    c.restore(); return;
+  mFace(M, [33.3, -5, 12.5, 33.3, 5, 12.5, 33.3, 5, 19, 33.3, -5, 19], '#2a2623', 0, 0, 16, { b: 0.5 });  // grille
+  mHull(M, [-33, -27, 5, 12, 25], [-33, -27, 5, 12, 34], '#b3261e');                                 // jerrycan
+  mCyl(M, [-39.5, 0, 21], [1, 0, 0], [0, 1, 0], [0, 0, 1], 9, 6, 10, TYRE, '#3a3531');               // spare wheel
+  mLine(M, [-18, -14, 25, -21, -14, 58, -21, 14, 58, -18, 14, 25], STEEL, 2.8, { ol: 1 });           // roll bar, behind Abood
+  mLine(M, [-21, -14, 58, -34, -13, 25], STEEL, 2.4, { ol: 1 }); mLine(M, [-21, 14, 58, -34, 13, 25], STEEL, 2.4, { ol: 1 });
+  for (const y of [-9, -3, 3, 9]) mHull(M, [-22.5, -19.5, y - 2.4, y + 2.4, 58.5], [-22.5, -19.5, y - 2.4, y + 2.4, 63], '#ffd95a', { raw: 1 }); // roof lights
+  mLine(M, [9, -13, 27, 6.5, -13, 39, 6.5, 13, 39, 9, 13, 27], STEEL, 1.8);                          // windscreen frame
+  mFace(M, [9, -13, 27, 6.5, -13, 39, 6.5, 13, 39, 9, 13, 27], '#cfeef4', 0, 0, 33, { ds: 1, raw: 1, a: 0.3, noInk: 1 });
+  mLine(M, [34, -13, 11, 38, -13, 21, 38, 13, 21, 34, 13, 11], '#8a817a', 2.4, { ol: 1 }); mLine(M, [38, -13, 16, 38, 13, 16], '#8a817a', 2, { ol: 1 }); // bull bar
+  mLine(M, [9, 0, 25, 3.5, 0, 31.5], '#1b1715', 1.8);                                               // steering column
+  mHull(M, [-12.5, -3.5, -7, 7, 21], [-12.5, -4.5, -8.8, 8.8, 39], '#fbfaf4');                               // Abood's kandura
+  mLine(M, [-4.2, 0, 38.5, -3.8, 0, 31], '#cfc9ba', 0.9, { b: 0.5 });                                    // its tassel
+  return M;
+}
+const CAR_STATIC = buildCar(), carItems = [];
+const comb = (a, ka, b, kb, c, kc) => { const x = a[0] * ka + b[0] * kb + c[0] * kc, y = a[1] * ka + b[1] * kb + c[1] * kc, z = a[2] * ka + b[2] * kb + c[2] * kc, l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
+function drawHead(c, hx, hy, r, f, s, u, mouth, sc) { // Abood's head: red shemagh, black agal, big eyes
+  const hp = (v, m) => [hx + v[0] * m, hy + (v[1] * ES - v[2] * EC) * m], see = v => v[1] * EC + v[2] * ES;
+  c.fillStyle = SHEMAGH; c.beginPath(); c.arc(hx, hy, r, 0, TAU); c.fill();
+  c.save(); c.clip();
+  const fd = comb(f, 1, u, -0.2, s, 0);
+  if (see(fd) > -0.4) {
+    let p = hp(fd, r * 0.5); const g = c.createRadialGradient(p[0], p[1] - r * 0.2, r * 0.1, p[0], p[1], r * 0.8); g.addColorStop(0, '#e0a978'); g.addColorStop(0.6, '#c98b5a'); g.addColorStop(1, '#a8704a');
+    c.fillStyle = g; c.beginPath(); c.arc(p[0], p[1], r * 0.74, 0, TAU); c.fill(); c.strokeStyle = 'rgba(43,26,18,.55)'; c.lineWidth = 1.1 * sc; c.stroke();
+    const look = hp(f, r * 0.07);
+    for (const sd of [-1, 1]) { const e = comb(f, 0.86, s, sd * 0.5, u, 0.2); if (see(e) < 0.12) continue; p = hp(e, r * 0.93);
+      c.fillStyle = '#fff'; c.strokeStyle = INK; c.lineWidth = 0.9 * sc; c.beginPath(); c.ellipse(p[0], p[1], r * 0.23, r * 0.26, 0, 0, TAU); c.fill(); c.stroke();
+      c.fillStyle = INK; c.beginPath(); c.arc(p[0] + look[0] - hx, p[1] + look[1] - hy, r * 0.14, 0, TAU); c.fill();
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(p[0] + look[0] - hx + r * 0.05, p[1] + look[1] - hy - r * 0.06, r * 0.05, 0, TAU); c.fill(); }
+    for (const sd of [-1, 1]) { const ch = comb(f, 0.8, s, sd * 0.62, u, -0.22); if (see(ch) < 0.3) continue; p = hp(ch, r * 0.93); c.fillStyle = 'rgba(240,110,110,.4)'; c.beginPath(); c.arc(p[0], p[1], r * 0.13, 0, TAU); c.fill(); }
+    const m = comb(f, 1, u, -0.3, s, 0);
+    if (see(m) > 0.25) { p = hp(m, r * 0.93); c.strokeStyle = INK; c.lineWidth = 1.4 * sc; c.beginPath();
+      if (mouth === 'o') { c.fillStyle = '#5a1414'; c.ellipse(p[0], p[1] - r * 0.05, r * 0.15, r * 0.19, 0, 0, TAU); c.fill(); c.stroke(); }
+      else { c.arc(p[0], p[1] - r * 0.14, r * 0.2, 0.12 * Math.PI, 0.88 * Math.PI); c.stroke(); } }
   }
-  const body = () => { c.beginPath(); c.moveTo(-26, -10); c.lineTo(8, -11.5); c.quadraticCurveTo(27, -9, 28, 0); c.quadraticCurveTo(27, 9, 8, 11.5); c.lineTo(-26, 10); c.quadraticCurveTo(-28, 0, -26, -10); c.closePath(); };
-  body(); c.fillStyle = col.main; c.fill(); c.save(); c.clip();
-  c.fillStyle = col.dark; c.fillRect(-30, 5, 60, 10); c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(-30, -11, 60, 4);
-  c.fillStyle = col.trim; c.fillRect(11, -2.2, 18, 4.4); c.restore(); body(); c.stroke();
-  c.fillStyle = '#fff3c4'; c.lineWidth = 1.2; for (const hy of [-7.5, 7.5]) { c.beginPath(); c.arc(23, hy, 2.3, 0, TAU); c.fill(); c.stroke(); }
-  c.fillStyle = '#3a322c'; c.lineWidth = 1.5; c.beginPath(); c.roundRect(-14, -8.5, 20, 17, 4); c.fill(); c.stroke();          // cockpit
-  c.strokeStyle = '#1b1715'; c.lineWidth = 2; c.beginPath(); c.arc(5, 0, 4.2, -1.2, 1.2); c.stroke();                         // steering wheel
-  c.strokeStyle = INK; c.lineWidth = 1.4;
-  c.fillStyle = '#fbfaf4'; c.beginPath(); c.ellipse(-5, 0, 5, 7.6, 0, 0, TAU); c.fill(); c.stroke();                          // Abood's shoulders in the white kandura
-  c.fillStyle = '#c98b5a'; c.beginPath(); c.arc(2.5, -4.5, 1.8, 0, TAU); c.arc(2.5, 4.5, 1.8, 0, TAU); c.fill();             // hands on the wheel
-  c.fillStyle = SHEMAGH; c.beginPath(); c.moveTo(-3, -5.6); c.quadraticCurveTo(-16 + flagX * 0.25, -4 + flagY * 0.3, -17 + flagX * 0.4, flagY * 0.5); c.quadraticCurveTo(-12, 4, -3, 5.6); c.closePath(); c.fill(); c.stroke(); // shemagh tail, blowing back
-  c.beginPath(); c.arc(-3.5, 0, 6.2, 0, TAU); c.fill(); c.stroke();                                                          // his head in the red shemagh
-  c.strokeStyle = '#121212'; c.lineWidth = 2; c.beginPath(); c.arc(-3.5, 0, 4.1, 0, TAU); c.stroke();                          // the agal
-  c.strokeStyle = '#2a2623'; c.lineWidth = 2.4; c.beginPath(); c.roundRect(-16, -10.5, 24, 21, 5); c.stroke();                // roll cage
-  c.fillStyle = '#b3261e'; c.strokeStyle = INK; c.lineWidth = 1.3; c.beginPath(); c.roundRect(-25, -4.5, 7, 9, 2); c.fill(); c.stroke(); // spare jerrycan
   c.restore();
-  // the whip flag every dune buggy carries, leaning back with the speed
-  c.strokeStyle = INK; c.lineWidth = 1.3; c.beginPath(); c.moveTo(-22, 8); c.lineTo(-22 + flagX, 8 + flagY); c.stroke();
-  c.fillStyle = '#f28c28'; c.beginPath(); c.moveTo(-22 + flagX, 8 + flagY); c.lineTo(-22 + flagX * 1.45 - 3, 5 + flagY * 1.3); c.lineTo(-22 + flagX * 1.45 + 3, 11 + flagY * 1.3); c.closePath(); c.fill(); c.stroke();
+  c.beginPath(); for (let i = 0; i < 16; i++) { const an = i / 16 * TAU, cs = Math.cos(an) * 0.82, sn = Math.sin(an) * 0.82, p = hp([u[0] * 0.5 + f[0] * cs + s[0] * sn, u[1] * 0.5 + f[1] * cs + s[1] * sn, u[2] * 0.5 + f[2] * cs + s[2] * sn], r); if (i) c.lineTo(p[0], p[1]); else c.moveTo(p[0], p[1]); }
+  c.closePath(); c.fillStyle = SHEMAGH; c.fill(); c.strokeStyle = '#121212'; c.lineWidth = 2.5 * sc; c.stroke();     // the top of the shemagh, ringed by the agal
+  c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = 1.3 * sc; c.beginPath(); c.arc(hx, hy - r * 0.42, r * 0.36, Math.PI * 1.15, Math.PI * 1.7); c.stroke();
+  c.strokeStyle = INK; c.lineWidth = 1.5 * sc; c.beginPath(); c.arc(hx, hy, r, 0, TAU); c.stroke();
+}
+// o: ang (heading), pit and rol (tilt), lift (height off the ground), steer, spin (wheel turn), speed, lat (sideways speed), t, air, mouth, col
+function drawCar3D(c, x, y, sc, o) {
+  const col = o.col, k = CS * sc, th = o.pit || 0, ph = o.rol || 0, cp = Math.cos(th), sp = Math.sin(th), cr = Math.cos(ph), sr = Math.sin(ph), ca = Math.cos(o.ang), sa = Math.sin(o.ang);
+  const yaw = (vx, vy, vz) => [vx * ca - vy * sa, vx * sa + vy * ca, vz];
+  const F = yaw(cp, 0, sp), R = yaw(-sp * sr, cr, cp * sr), U = yaw(-sp * cr, -sr, cp * cr), oy = y - (o.lift || 0) * 0.7 * sc;
+  const st = (o.steer || 0) * 0.5, spd = o.speed || 0, tt = o.t || 0, spin = o.spin || 0, D = [];
+  // wheels: the front pair turns with the steering, all four spin
+  for (const [wx, wy, front] of WHEELS) {
+    const s = front ? st : 0, a = [-Math.sin(s), Math.cos(s), 0], u = [Math.cos(s), Math.sin(s), 0], v = [0, 0, 1], sg = Math.sign(wy), cx = wx, cy = wy, cz = 12.5;
+    mCyl(D, [cx, cy, cz], a, u, v, 12.5, 10.5, 12, TYRE, '#3a3531');
+    const hub = [], hx = cx + a[0] * sg * 5.6, hy = cy + a[1] * sg * 5.6; for (let i = 0; i < 6; i++) { const an = spin + i / 6 * TAU, cs = Math.cos(an) * 6.6, sn = Math.sin(an) * 6.6; hub.push(hx + u[0] * cs, hy + u[1] * cs, cz + sn); }
+    const hf = mFace(D, hub, '#d9cfbd', cx, cy, cz, { b: 0.8 });
+    mLine(D, [hub[0], hub[1], hub[2], hub[9], hub[10], hub[11]], '#6b635c', 1.3, { b: 1.2, n: hf.n }); mLine(D, [hub[3], hub[4], hub[5], hub[12], hub[13], hub[14]], '#6b635c', 1.3, { b: 1.2, n: hf.n });
+  }
+  // Abood: arms on the wheel (up in the air on a jump), the steering wheel, the tail of his shemagh streaming back
+  const up = o.air, hl = up ? [-3, -15, 64] : [2.6 - st * 2.4, -4.4, 31.8 + st * 2], hr = up ? [-3, 15, 64] : [2.6 + st * 2.4, 4.4, 31.8 - st * 2];
+  mLine(D, [-8, -9, 37, hl[0], hl[1], hl[2]], '#fbfaf4', 4.6, { ol: 1 }); mLine(D, [-8, 9, 37, hr[0], hr[1], hr[2]], '#fbfaf4', 4.6, { ol: 1 });
+  D.push({ k: 'd', c: hl, r: 3, col: '#c98b5a' }, { k: 'd', c: hr, r: 3, col: '#c98b5a' });
+  const ring = []; for (let i = 0; i <= 10; i++) { const an = i / 10 * TAU + st * 2, cs = Math.cos(an) * 4.8, sn = Math.sin(an) * 4.8; ring.push(3.5 - sn * 0.45, cs, 31.5 + sn * 0.89); } mLine(D, ring, '#1b1715', 2);
+  const fl = clamp(Math.abs(spd) * 0.07, 0, 20), wv = Math.sin(tt * 10) * (1.5 + fl * 0.12), lat = clamp(-(o.lat || 0) * 0.05, -7, 7), tx = -20 - fl, tz = 51 - Math.max(0, 16 - fl) + wv * 0.5;
+  mFace(D, [-16, -8, 52, -16, 8, 52, -13.6, 9.4, 39, -13.6, -9.4, 39], SHEMAGH, -7, 0, 45, { ds: 1 });                    // shemagh over the shoulders
+  mFace(D, [-17, -6.5, 55, -17, 6.5, 55, tx, lat + wv + 3.5, tz, tx, lat + wv - 3.5, tz], SHEMAGH, -7, 0, 20, { ds: 1 }); // and its tail
+  mLine(D, [tx, lat + wv - 3.5, tz, tx, lat + wv + 3.5, tz], '#fff1e8', 1.6);
+  D.push({ k: 'h', c: [-7, 0, 52], r: 12.5 });
+  // the whip mast every dune car carries, with the UAE flag, leaning back with the speed
+  const ln = clamp(-spd * 0.05, -15, 5) + Math.sin(tt * 9) * 1.2, bx = -34, by = -13, mx = bx + ln, my = by + lat, mz = 80;
+  mLine(D, [bx, by, 25, bx + ln * 0.3, by + lat * 0.3, 52, mx, my, mz], INK, 1.2);
+  const fw = Math.sin(tt * 12) * 1.5, band = (z0, z1, hex) => mFace(D, [mx - 4, my, mz - z0, mx - 15, my + fw, mz - z0, mx - 15, my + fw, mz - z1, mx - 4, my, mz - z1], hex, 0, 0, 0, { ds: 1, raw: 1, iw: 0.7 });
+  band(0, 3, '#00732f'); band(3, 6, '#ffffff'); band(6, 9, '#111111'); mFace(D, [mx, my, mz, mx - 4, my, mz, mx - 4, my, mz - 9, mx, my, mz - 9], '#e8112d', 0, 0, 0, { ds: 1, raw: 1, iw: 0.7 });
+  // sort back to front, dropping faces that point away
+  carItems.length = 0;
+  const add = it => {
+    if (it.n) { const n = it.n, nx = F[0] * n[0] + R[0] * n[1] + U[0] * n[2], ny = F[1] * n[0] + R[1] * n[1] + U[1] * n[2], nz = F[2] * n[0] + R[2] * n[1] + U[2] * n[2], vis = ny * VY + nz * VZ;
+      if (vis <= 0.02 && !it.ds) return; it.f = 0.72 + 0.4 * Math.max(0, (nx * SUNX + ny * SUNY + nz * SUNZ) * (vis < 0 ? -1 : 1)); }
+    const m = it.c; it.d = (F[1] * m[0] + R[1] * m[1] + U[1] * m[2]) * VY + (F[2] * m[0] + R[2] * m[1] + U[2] * m[2]) * VZ + (it.b || 0); carItems.push(it);
+  };
+  for (const it of CAR_STATIC) add(it); for (const it of D) add(it);
+  carItems.sort((a, b) => a.d - b.d);
+  const path = m => { c.beginPath(); for (let i = 0; i < m.length; i += 3) { const X = F[0] * m[i] + R[0] * m[i + 1] + U[0] * m[i + 2], Y = F[1] * m[i] + R[1] * m[i + 1] + U[1] * m[i + 2], Z = F[2] * m[i] + R[2] * m[i + 1] + U[2] * m[i + 2]; if (i) c.lineTo(x + X * k, oy + (Y - ZS * Z) * k); else c.moveTo(x + X * k, oy + (Y - ZS * Z) * k); } };
+  const pt = m => { const X = F[0] * m[0] + R[0] * m[1] + U[0] * m[2], Y = F[1] * m[0] + R[1] * m[1] + U[1] * m[2], Z = F[2] * m[0] + R[2] * m[1] + U[2] * m[2]; return [x + X * k, oy + (Y - ZS * Z) * k]; };
+  c.lineJoin = 'round'; c.lineCap = 'round';
+  for (const it of carItems) {
+    const hex = it.col && (it.col[0] === '#' ? it.col : col[it.col]);
+    if (it.k === 'f') { path(it.m); c.closePath(); if (it.a) c.globalAlpha = it.a; c.fillStyle = it.raw ? hex : shade(hex, it.f); c.fill(); if (it.a) c.globalAlpha = 1;
+      if (!it.noInk) { c.strokeStyle = it.ink || INK; c.lineWidth = (it.iw || 1.25) * sc; c.stroke(); } }
+    else if (it.k === 'l') { path(it.m); if (it.ol) { c.strokeStyle = INK; c.lineWidth = (it.w + 1.7) * k; c.stroke(); } c.strokeStyle = hex; c.lineWidth = it.w * k; c.stroke(); }
+    else if (it.k === 'd') { const p = pt(it.c); c.fillStyle = hex; c.strokeStyle = INK; c.lineWidth = 1.2 * sc; c.beginPath(); c.arc(p[0], p[1], it.r * k, 0, TAU); c.fill(); c.stroke(); }
+    else { const p = pt(it.c), hy = st * 0.7, ch = Math.cos(hy), sh = Math.sin(hy);
+      drawHead(c, p[0], p[1], it.r * k, [F[0] * ch + R[0] * sh, F[1] * ch + R[1] * sh, F[2] * ch + R[2] * sh], [R[0] * ch - F[0] * sh, R[1] * ch - F[1] * sh, R[2] * ch - F[2] * sh], U, o.mouth, sc); }
+  }
 }
 
 // ---------- art: scenery, drawn standing up on the sand (feet at 0,0) ----------
@@ -467,7 +577,7 @@ const car = {}, run = { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], fuel: 10
 const parts = [], floats = [], tracks = [[], []], keys = {}, joy = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, TIP = 0.4;
 function resetCar() {
-  Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0 });
+  Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0, pit: 0, rol: 0, spin: 0, rside: 1 });
   tracks[0].length = tracks[1].length = 0; parts.length = floats.length = 0;
 }
 const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
@@ -475,7 +585,7 @@ function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2) * rs; // phones start at a lower render resolution
   const w = Math.max(1, Math.round(cv.clientWidth * dpr)), h = Math.max(1, Math.round(cv.clientHeight * dpr));
   if (w !== cv.width || h !== cv.height) { cv.width = w; cv.height = h; }
-  W = w; Hh = h; zoom = Math.sqrt(W * Hh / (920 * 540)); // every screen shape sees about the same amount of desert
+  W = w; Hh = h; zoom = Math.sqrt(W * Hh / (800 * 470)); // every screen shape sees about the same amount of desert
 }
 function note(text, cls, secs = 2.4) { const n = $('note'); n.textContent = text; n.className = cls || ''; n.hidden = false; noteT = secs; }
 function float(x, y, txt, col) { floats.push({ x, y, txt, col: col || '#fffaf0', life: 1.3 }); if (floats.length > 12) floats.shift(); }
@@ -483,7 +593,7 @@ function puff(x, y, vx, vy, n, big) { for (let i = 0; i < n && parts.length < 11
 
 // ---------- driving ----------
 function startRoll(gx, gy) {
-  const m = Math.hypot(gx, gy) || 1; car.roll = 1; car.rollT = 0; car.rdx = -gx / m; car.rdy = -gy / m; car.air = false; car.tip = 0;
+  const m = Math.hypot(gx, gy) || 1; car.roll = 1; car.rollT = 0; car.rdx = -gx / m; car.rdy = -gy / m; car.rside = car.rdy * Math.cos(car.ang) - car.rdx * Math.sin(car.ang) < 0 ? -1 : 1; car.air = false; car.tip = 0;
   run.rolls++; run.fuel -= 4; shake = 12; buzz(120); play('smash'); puff(car.x, car.y, 0, 0, 14, true);
   float(car.x, car.y - 40, T('rolled'), '#ffd9d0'); note(pick(T('baba')), 'baba', 2.6);
 }
@@ -529,8 +639,8 @@ function update(dt) {
     if (car.safe <= 0 && Math.abs(sl) > TIP && sp > 60) { car.tip += (Math.abs(sl) - TIP) * 5 * dt * (0.6 + sp / 400); if (car.tip >= 1) startRoll(gx, gy); }
     else car.tip = Math.max(0, car.tip - dt * 1.5);
     if (!car.roll && !car.air) {
-      if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06)) puff(car.x - cs * 20, car.y - sn * 20, -car.vx * 0.25, -car.vy * 0.25, 1); }
-      car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 15 : -15, a = tracks[s]; a.push(car.x - cs * 17 - sn * w, car.y - sn * 17 + cs * w); if (a.length > 520) a.splice(0, 2); } }
+      if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06)) puff(car.x - cs * 38 + (Math.random() - 0.5) * 50 * sn, car.y - sn * 38 - (Math.random() - 0.5) * 50 * cs, -car.vx * 0.25, -car.vy * 0.25, 1); }
+      car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 27 : -27, a = tracks[s]; a.push(car.x - cs * 34 - sn * w, car.y - sn * 34 + cs * w); if (a.length > 520) a.splice(0, 2); } }
     }
   }
   if ((car.air || car.roll) && tracks[0].length && !isNaN(tracks[0][tracks[0].length - 1])) { tracks[0].push(NaN, NaN); tracks[1].push(NaN, NaN); } // break the tyre marks
@@ -539,7 +649,7 @@ function update(dt) {
   if (d > R - 30) { const k = (d - (R - 30)) * 5 * dt; car.vx -= car.x / d * k * 60; car.vy -= car.y / d * k * 60; if (d > R + 60) { car.x *= (R + 60) / d; car.y *= (R + 60) / d; } if (edgeT <= 0) { note(T('edge'), '', 2); edgeT = 4; } }
   edgeT -= dt; hitT -= dt;
   // solid things: bump and slow down
-  const bump = (o, oy) => { const dx = car.x - o.x, dy = car.y - (o.y - oy), rr = o.rad + 17, d2 = dx * dx + dy * dy; if (d2 >= rr * rr || car.air) return false;
+  const bump = (o, oy) => { const dx = car.x - o.x, dy = car.y - (o.y - oy), rr = o.rad + 27, d2 = dx * dx + dy * dy; if (d2 >= rr * rr || car.air) return false;
     const dd = Math.sqrt(d2) || 1, nx = dx / dd, ny = dy / dd, vn2 = car.vx * nx + car.vy * ny; car.x += nx * (rr - dd); car.y += ny * (rr - dd);
     if (vn2 < 0) { car.vx -= nx * vn2 * 1.3; car.vy -= ny * vn2 * 1.3; if (vn2 < -90 && hitT <= 0) { play('hit'); shake = 6; hitT = 0.4; buzz(40); } } return true; };
   for (const p of PROPS) if (p.rad && Math.abs(p.x - car.x) < 140 && Math.abs(p.y - car.y) < 140) bump(p, p.rad * 0.35);
@@ -554,8 +664,8 @@ function update(dt) {
     if (dc < 60) bump(a, 8);
   }
   // pick-ups
-  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < 1150) { o.off = true; run.dates++; play('date', 1 + (run.dates % 8) * 0.06); } }
-  for (const o of CANS) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < 1500) { o.off = true; run.fuel = Math.min(run.max, run.fuel + 26); run.low = false; play('power'); float(o.x, o.y - 30, T('canPlus'), '#bff0c0'); } }
+  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < 1700) { o.off = true; run.dates++; play('date', 1 + (run.dates % 8) * 0.06); } }
+  for (const o of CANS) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < 2200) { o.off = true; run.fuel = Math.min(run.max, run.fuel + 26); run.low = false; play('power'); float(o.x, o.y - 30, T('canPlus'), '#bff0c0'); } }
   for (const s of SITES) if (!run.seen[s.id]) { const dx = s.x - car.x, dy = s.y - car.y, rr = s.hill ? 130 : s.r + 50;
     if (dx * dx + dy * dy < rr * rr) { run.seen[s.id] = 1; if (!save.cards.includes(s.id)) { save.cards.push(s.id); save.coins += s.coins; run.cards.push(s.id); persist(); coinsUI(); play('zone'); note(T('found', T('s_' + s.id), s.coins), 'card', 3.2); } } }
   // fuel
@@ -563,6 +673,11 @@ function update(dt) {
   if (!run.low && run.fuel < run.max * 0.2 && run.fuel > 0) { run.low = true; note(T('fuelLow'), '', 3); }
   if (run.fuel <= 0) { run.fuel = 0; if (sp < 30 && !car.air && !car.roll) { run.over += dt; if (run.over > 0.9) endRun(false); } }
   // camera looks a little ahead of the buggy
+  // the car leans with the ground under it, and noses up or down in the air
+  const c2 = Math.cos(car.ang), s2 = Math.sin(car.ang), kt = Math.min(1, dt * 9);
+  car.pit += ((car.air ? clamp(car.vz / 380, -0.5, 0.55) : car.roll ? 0 : Math.atan(gx * c2 + gy * s2)) - car.pit) * kt;
+  car.rol += ((car.air || car.roll ? 0 : Math.atan(gy * c2 - gx * s2)) - car.rol) * kt;
+  car.spin += (car.vx * c2 + car.vy * s2) / (12.5 * CS) * dt;
   const k = Math.min(1, dt * 4); camx += (car.x + car.vx * 0.3 - camx) * k; camy += (car.y + car.vy * 0.3 - camy) * k;
   engine(sp, thr);
 }
@@ -570,14 +685,14 @@ function update(dt) {
 // ---------- drawing a frame ----------
 const draws = [];
 function drawCar(c) {
-  const alt = Math.max(0, car.z - H(car.x, car.y)), col = COLORS[save.color] || COLORS.red, cs = Math.cos(car.ang), sn = Math.sin(car.ang);
-  const f = car.vx * cs + car.vy * sn, l = -car.vx * sn + car.vy * cs;
-  c.save(); c.translate(car.x + 5 + alt * 0.35, car.y + 6 + alt * 0.45); c.rotate(car.ang); const ss = 1 - Math.min(0.4, alt / 400);
-  c.scale(ss, ss); c.fillStyle = 'rgba(60,30,15,' + (0.28 - Math.min(0.14, alt / 900)) + ')'; c.beginPath(); c.roundRect(-27, -16, 54, 32, 10); c.fill(); c.restore();
-  c.save(); c.translate(car.x, car.y - alt * 0.6); c.rotate(car.ang); const sc = 1 + alt / 260; c.scale(sc * (1 - Math.min(0.18, Math.abs(car.sf) * 0.28)), sc);
-  const roll = car.roll ? car.rollT / 1.15 * TAU * 2 : car.tip * 0.7 * Math.sin(t * 22);
-  drawBuggy(c, col, car.steer, roll, clamp(-f * 0.03, -13, 6) + Math.sin(t * 9) * 1.2, clamp(-l * 0.05, -8, 8)); c.restore();
-  if (car.tip > 0.35 && !car.roll) { c.fillStyle = SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 3; c.font = '800 26px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.strokeText('!', car.x, car.y - 34); c.fillText('!', car.x, car.y - 34); }
+  const alt = Math.max(0, car.z - H(car.x, car.y)), col = COLORS[save.color] || COLORS.white, cs = Math.cos(car.ang), sn = Math.sin(car.ang);
+  const f = car.vx * cs + car.vy * sn, l = -car.vx * sn + car.vy * cs, ss = 1 - Math.min(0.4, alt / 400);
+  c.save(); c.translate(car.x + 7 + alt * 0.4, car.y + 9 + alt * 0.3); c.rotate(car.ang); c.scale(ss, ss);
+  c.fillStyle = 'rgba(60,30,15,' + (0.3 - Math.min(0.15, alt / 800)) + ')'; c.beginPath(); c.roundRect(-52, -33, 104, 66, 18); c.fill(); c.restore();
+  const tumble = car.roll ? -car.rside * car.rollT / 1.15 * TAU * 2 : car.tip * 0.3 * Math.sin(t * 22);
+  drawCar3D(c, car.x, car.y, 1, { ang: car.ang, pit: car.pit, rol: car.rol + tumble, lift: alt + (car.roll ? 8 + Math.abs(Math.sin(tumble)) * 16 : 0), steer: car.steer, spin: car.spin,
+    speed: f, lat: l, t, air: car.air && car.airT > 0.12, mouth: car.air || car.roll || car.tip > 0.35 ? 'o' : '', col });
+  if (car.tip > 0.35 && !car.roll) { c.fillStyle = SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 4; c.font = '800 32px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.strokeText('!', car.x, car.y - 122); c.fillText('!', car.x, car.y - 122); }
 }
 function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under everything else
   let s = site('oasis');
@@ -607,7 +722,7 @@ function render(dt) {
   const hw = W / 2 / zoom + 8, hh = Hh / 2 / zoom + 8, x0 = camx - hw, x1 = camx + hw, y0 = camy - hh, y1 = camy + hh;
   for (let iy = Math.floor(y0 / TS); iy <= Math.floor(y1 / TS); iy++) for (let ix = Math.floor(x0 / TS); ix <= Math.floor(x1 / TS); ix++) { const tl = tile(ix, iy); if (tl) c.drawImage(tl, ix * TS, iy * TS, TS + 0.6, TS + 0.6); }
   decals(c, x0, y0, x1, y1);
-  c.strokeStyle = 'rgba(110,62,34,.3)'; c.lineWidth = 6; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); // tyre marks
+  c.strokeStyle = 'rgba(110,62,34,.3)'; c.lineWidth = 9; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); // tyre marks
   for (const a of tracks) { let pen = false; for (let i = 0; i < a.length; i += 2) { if (isNaN(a[i])) { pen = false; continue; } if (pen) c.lineTo(a[i], a[i + 1]); else c.moveTo(a[i], a[i + 1]); pen = true; } }
   c.stroke();
   const inView = (x, y, m) => x > x0 - m && x < x1 + m && y > y0 - m && y < y1 + m;
@@ -734,7 +849,7 @@ function openSheet(id) {
     body.append(el('p', 'label', T('garageNote'))); const grid = el('div', 'cards');
     for (const [cid, col] of Object.entries(COLORS)) {
       const own = save.colors.includes(cid), on = save.color === cid, card = el('div', 'card' + (on ? ' on' : '')), cn = mk(192, 192), g = cn.getContext('2d');
-      g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); g.setTransform(2.9, 0, 0, 2.9, 96, 100); g.rotate(-0.5); drawBuggy(g, col, 0.3, 0, -8, 2);
+      g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); drawCar3D(g, 92, 158, 1.18, { ang: 0.95, steer: 0.5, speed: 90, t: 1, col });
       const btn = el('button', on || own ? 'sec' : '', on ? T('using') : own ? T('use') : T('buy', col.cost)); btn.type = 'button'; btn.disabled = on;
       btn.onclick = () => { if (!own) { if (save.coins < col.cost) return note(T('notEnough')); save.coins -= col.cost; save.colors.push(cid); note(T('bought')); play('power'); } save.color = cid; persist(); coinsUI(); openSheet('garage'); };
       card.append(cn, el('b', '', T('c_' + cid)), el('small', '', col.cost ? nf(col.cost) : T('free')), btn); grid.append(card);
