@@ -627,7 +627,8 @@ const parts = [], floats = [], tracks = [[], []], keys = {}, joy = { id: -1, ox:
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // base values; see PH
    TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, TIP = 0.4;
 function resetCar() {
-  Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0, pit: 0, rol: 0, spin: 0, rside: 1 });
+  Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0, pit: 0, rol: 0, spin: 0, rside: 1,
+    drift: false, dsc: 0, dyaw: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0 });
   tracks[0].length = tracks[1].length = 0; parts.length = floats.length = 0;
 }
 const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
@@ -655,7 +656,7 @@ function addXP(n) {
 }
 function newMission() {
   const L = save.lvl, have = save.missions.map(m => m.t), r1 = x => Math.round(x * 10) / 10;
-  const t = pick(['dates', 'dist', 'air', 'jump', 'visit', 'noroll', 'cans', 'deliver', 'summit', 'tdates', 'tdist'].filter(k => !have.includes(k))), m = { t, n: 1, p: 0 }; let w = 1;
+  const t = pick(['dates', 'dist', 'air', 'jump', 'visit', 'noroll', 'cans', 'deliver', 'summit', 'tdates', 'tdist', 'drift', 'two', 'flip', 'spin', 'stunt'].filter(k => !have.includes(k))), m = { t, n: 1, p: 0 }; let w = 1;
   if (t === 'dates') m.n = Math.min(90, 15 + L * 5);
   else if (t === 'dist') m.n = Math.min(4500, 600 + L * 200);
   else if (t === 'air') { m.n = Math.min(12, r1(2 + L * 0.5)); w = 1.2; }
@@ -665,6 +666,11 @@ function newMission() {
   else if (t === 'cans') m.n = Math.min(6, 1 + (L / 3 | 0));
   else if (t === 'deliver') { const ids = SITES.map(s => s.id).filter(id => id !== 'moreeb'); m.a = pick(ids); m.b = pick(ids.filter(id => id !== m.a)); m.n = 2; w = 1.5; }
   else if (t === 'summit') w = 1.5;
+  else if (t === 'drift') { m.n = Math.min(3000, 200 + L * 80); w = 1.2; }
+  else if (t === 'two') { m.n = Math.min(10, r1(1.5 + L * 0.4)); w = 1.4; }
+  else if (t === 'flip') { m.n = Math.min(4, 1 + (L / 5 | 0)); w = 1.5; }
+  else if (t === 'spin') { m.n = Math.min(5, 1 + (L / 4 | 0)); w = 1.3; }
+  else if (t === 'stunt') { m.n = Math.min(6000, 400 + L * 150); w = 1.2; }
   else if (t === 'tdates') { m.n = 80 + L * 30; w = 1.4; }
   else { m.n = 3000 + L * 600; w = 1.4; }
   m.rw = Math.round((25 + L * 5) * w / 5) * 5; m.xp = Math.round(40 * w); return m;
@@ -680,6 +686,11 @@ function mProg(m) { // how far a mission has got, counting the run in progress
     case 'visit': return on ? Object.keys(run.seen).length : 0;
     case 'noroll': return on ? run.noRoll / 8 : 0;
     case 'cans': return on ? run.cans : 0;
+    case 'drift': return on ? run.drift + car.dsc : 0;
+    case 'two': return on ? run.two : 0;
+    case 'flip': return on ? run.flips : 0;
+    case 'spin': return on ? run.spins : 0;
+    case 'stunt': return on ? run.stunt : 0;
     case 'deliver': { if (!on) return 0; const i = run.vis.indexOf(m.a); return i < 0 ? 0 : run.vis.indexOf(m.b, i + 1) >= 0 ? 2 : 1; }
     case 'summit': return on && run.seen.moreeb ? 1 : 0;
     case 'tdates': return m.p + (on ? run.dates : 0);
@@ -687,7 +698,7 @@ function mProg(m) { // how far a mission has got, counting the run in progress
   }
 }
 const mText = m => m.t === 'deliver' ? T('m_deliver', T('s_' + m.a), T('s_' + m.b)) : T('m_' + m.t, m.n);
-const mVal = (m, v) => m.t === 'air' || m.t === 'jump' ? v.toFixed(1) : nf(Math.floor(v));
+const mVal = (m, v) => m.t === 'air' || m.t === 'jump' || m.t === 'two' ? v.toFixed(1) : nf(Math.floor(v));
 function checkMissions() {
   for (const m of save.missions) if (!m.done && mProg(m) >= m.n) {
     m.done = 1; save.coins += m.rw; run.mdone++; run.mcoins += m.rw; addXP(m.xp); persist(); coinsUI(); play('zone'); note(T('mDone', mText(m), m.rw), 'card', 3.4);
@@ -719,8 +730,15 @@ function finishRace() {
 }
 
 // ---------- driving ----------
-function startRoll(gx, gy) {
-  const m = Math.hypot(gx, gy) || 1; car.roll = 1; car.rollT = 0; car.rdx = -gx / m; car.rdy = -gy / m; car.rside = car.rdy * Math.cos(car.ang) - car.rdx * Math.sin(car.ang) < 0 ? -1 : 1; car.air = false; car.tip = 0;
+// ---------- stunts ----------
+// Drift: the back steps out and the car slides sideways under power. Two wheels: lean far enough on a slope or in a
+// fast turn and one side lifts; hold it there without going over. In the air: spins and flips, landed on the wheels.
+function stunt(pts, label) { pts = Math.round(pts); if (pts <= 0) return; run.stunt += pts; float(car.x, car.y - 125, label + ' +' + pts, '#ffe07a'); play('date', 0.75, 1.2); }
+function endDrift() { if (!car.drift) return; car.drift = false; if (car.dsc > 20) { run.drift += car.dsc; stunt(car.dsc, T('st_drift')); } car.dsc = 0; }
+function endTwo() { if (car.twoT > 0.4) stunt(car.twoT * 70, T('st_two', car.twoT.toFixed(1))); car.twoT = 0; }
+function startRoll(dx, dy) { // the car goes over and tumbles in the direction (dx, dy)
+  endDrift(); car.twoT = 0;
+  const m = Math.hypot(dx, dy) || 1; car.roll = 1; car.rollT = 0; car.rdx = dx / m; car.rdy = dy / m; car.rside = car.rdy * Math.cos(car.ang) - car.rdx * Math.sin(car.ang) < 0 ? -1 : 1; car.air = false; car.tip = 0; car.fp = car.fy = 0;
   run.rolls++; run.nr = 0; if (!run.race) run.fuel -= 4; shake = 12; buzz(120); play('smash'); puff(car.x, car.y, 0, 0, 14, true);
   float(car.x, car.y - 40, T('rolled'), '#ffd9d0'); note(pick(T('baba')), 'baba', 2.6);
 }
@@ -730,11 +748,14 @@ function update(dt) {
     if (n !== run.cdn) { run.cdn = n; if (n > 0) { note(String(n), 'big', 0.95); play('tek', 0.8, 2); } else { note(T('go'), 'big', 0.9); play('zone', 1.3); } }
     camx = car.x; camy = car.y; engine(0, 0.3); return;
   }
-  let thr = 0, steer = 0;
-  if (joy.id >= 0) { // touch: drag the way you want to go
+  let thr = 0, steer = 0, hb = false, spinIn = 0, flipIn = 0; // hb: handbrake, which starts a drift
+  if (joy.id >= 0) { // touch: drag the way you want to go. A sharp change of direction at speed is a drift.
     const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = Math.hypot(dx, dy);
-    if (m > 8) { const d = wrap(Math.atan2(dy, dx) - car.ang); steer = clamp(d * 2.4, -1, 1); thr = clamp(m / JOY_R, 0.25, 1) * (Math.abs(d) > 2 ? 0.55 : 1); }
-  } else { thr = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0); steer = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0); }
+    if (m > 8) { const d = wrap(Math.atan2(dy, dx) - car.ang); steer = clamp(d * 2.4, -1, 1); thr = clamp(m / JOY_R, 0.25, 1) * (Math.abs(d) > 2 ? 0.55 : 1); hb = Math.abs(d) > 0.9 && Math.abs(d) < 2.5;
+      // in the air the drag is read against the take-off direction: sideways spins the car, backwards flips it
+      const k = Math.min(1, m / JOY_R) / m, c0 = Math.cos(car.a0), s0 = Math.sin(car.a0), al = (dx * c0 + dy * s0) * k, ac = (dy * c0 - dx * s0) * k; if (Math.abs(ac) > 0.5) spinIn = Math.sign(ac); if (al < -0.5) flipIn = -1; }
+  } else { thr = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0); steer = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
+    hb = !!(keys.Space || keys.ShiftLeft || keys.ShiftRight); if (hb) { spinIn = steer; flipIn = steer ? 0 : thr < 0 ? -1 : 0; } if (keys.KeyF) flipIn = 1; } // keyboard: hold Space for a drift; in the air Space with left or right spins, Space with down is a backflip, F a front flip
   if (run.fuel <= 0) thr = 0;
   car.steer += (steer - car.steer) * Math.min(1, dt * 9); car.thr = thr; car.safe -= dt;
   car.x += car.vx * dt; car.y += car.vy * dt;
@@ -746,32 +767,57 @@ function update(dt) {
     if (Math.random() < dt * 30) puff(car.x, car.y, 0, 0, 1, true);
     if (k >= 1) { car.roll = 0; car.safe = 1.6; car.vx *= 0.4; car.vy *= 0.4; car.gvz = 0; }
   } else if (car.air) {
-    car.vz -= GRAV * dt; car.z += car.vz * dt; car.airT += dt; car.ang += car.steer * 0.9 * dt;
+    car.vz -= GRAV * dt; car.z += car.vz * dt; car.airT += dt;
+    // A trick is one full turn, paced to finish before the wheels touch down, so a flip or spin started on a big enough jump lands clean.
+    const left = (car.vz + Math.sqrt(Math.max(0, car.vz * car.vz + 2 * GRAV * Math.max(0, car.z - h0)))) / GRAV; // seconds until landing, on level ground
+    if (!car.trick && (flipIn || spinIn) && left > 0.42) car.trick = { flip: flipIn, spin: flipIn ? 0 : spinIn, rate: Math.min(17, TAU / Math.max(0.36, left * 0.78)), left: TAU };
+    if (car.trick) { const tk = car.trick, d = Math.min(tk.left, tk.rate * dt); tk.left -= d; car.fp += tk.flip * d; car.fy += tk.spin * d; car.ang += tk.spin * d; if (tk.left <= 0) car.trick = null; } // fp: how far the car has flipped, nose down positive
+    else car.ang += car.steer * 0.9 * dt;
+    if (car.vz < 0 && (car.z - h0) / Math.max(60, -car.vz) < 0.22) { const e = wrap(car.fp); if (Math.abs(e) < 1.1) car.fp -= e * Math.min(1, dt * 14); } // close to the ground: ease the wheels level
     if (car.z <= h0) { // landing
-      const cs = Math.cos(car.ang), sn = Math.sin(car.ang), l = -car.vx * sn + car.vy * cs, sl = -gx * sn + gy * cs;
-      car.air = false; car.z = h0; car.gvz = gx * car.vx + gy * car.vy;
-      if (car.airT > 0.32) {
-        const s = car.airT.toFixed(1); run.air += car.airT; if (car.airT > run.maxAir) run.maxAir = car.airT; shake = Math.min(9, 3 + car.airT * 5); play('hit', 0.8, 0.6); puff(car.x, car.y, car.vx * 0.2, car.vy * 0.2, 8, true); buzz(30);
-        float(car.x, car.y - 46, car.airT > 0.9 ? T('bigJump', s) : T('jump', s), '#fff3c4'); if (car.airT > 0.9) note(pick(T('wow')), '', 1.4);
-        if (car.safe <= 0 && ((Math.abs(l) > 0.5 * sp && sp > 150) || Math.abs(sl) > PH.tip + 0.04)) startRoll(gx, gy);
+      const cs = Math.cos(car.ang), sn = Math.sin(car.ang), l = -car.vx * sn + car.vy * cs, sl = -gx * sn + gy * cs, gm = Math.hypot(gx, gy), upside = Math.abs(wrap(car.fp)) > 0.8;
+      const flips = Math.round(car.fp / TAU), spins = Math.round(car.fy / Math.PI);
+      car.air = false; car.z = h0; car.gvz = gx * car.vx + gy * car.vy; car.fp = car.fy = 0; car.trick = null;
+      if (car.airT > 0.32 || upside) {
+        shake = Math.min(9, 3 + car.airT * 5); play('hit', 0.8, 0.6); puff(car.x, car.y, car.vx * 0.2, car.vy * 0.2, 8, true); buzz(30);
+        if (upside || (car.safe <= 0 && ((Math.abs(l) > 0.5 * sp && sp > 150) || Math.abs(sl) > PH.tip + 0.04))) { if (gm > 0.08) startRoll(-gx, -gy); else startRoll(-sn * (l || 1), cs * (l || 1)); }
+        else { // a clean landing banks the jump and any tricks done in it
+          run.air += car.airT; if (car.airT > run.maxAir) run.maxAir = car.airT;
+          let pts = car.airT * 40, label = T('jump', car.airT.toFixed(1));
+          if (spins) { const deg = Math.abs(spins) * 180; pts += Math.abs(spins) * 70; label = deg + '!'; run.spins += Math.abs(spins) >> 1; }
+          if (flips) { pts += Math.abs(flips) * 160; label = T(flips < 0 ? 'st_back' : 'st_front', Math.abs(flips)) + (spins ? ' ' + Math.abs(spins) * 180 : ''); run.flips += Math.abs(flips); }
+          stunt(pts, label); if (flips || Math.abs(spins) > 1 || car.airT > 0.9) note(pick(T('wow')), '', 1.4);
+        }
       }
     }
   } else {
     let cs = Math.cos(car.ang), sn = Math.sin(car.ang);
-    car.ang += car.steer * TURN * clamp((car.vx * cs + car.vy * sn) / 150, -1, 1) * dt; cs = Math.cos(car.ang); sn = Math.sin(car.ang);
+    const want = hb && sp > 150 && Math.abs(car.steer) > 0.3; if (want && !car.drift) { car.drift = true; car.dsc = 0; car.dyaw = 0; play('whoosh', 0.7, 0.5); }
+    const yr = car.steer * TURN * clamp((car.vx * cs + car.vy * sn) / 150, -1, 1) * (car.drift ? 1.5 : 1); // how fast the car is turning
+    car.ang += yr * dt; cs = Math.cos(car.ang); sn = Math.sin(car.ang);
     let f = car.vx * cs + car.vy * sn, l = -car.vx * sn + car.vy * cs; const sf = gx * cs + gy * sn, sl = -gx * sn + gy * cs; car.sf = sf;
     const push = thr > 0 ? thr * PH.acc : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * 0.5) : 0;
     f += (push - GR * sf - DRAG * f) * dt; f -= clamp(f, -PH.rr * dt, PH.rr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
-    l += -GR * sl * dt; l *= Math.exp(-PH.grip * dt);                              // the slope pulls sideways; the tyres only half hold in sand
+    l += -GR * sl * dt; l *= Math.exp(-(car.drift ? 0.85 : PH.grip) * dt);                              // the slope pulls sideways; the tyres only half hold in sand
     car.vx = cs * f - sn * l; car.vy = sn * f + cs * l; sp = Math.hypot(car.vx, car.vy);
     const gvz = gx * car.vx + gy * car.vy;
     if ((car.gvz - gvz) / dt > GRAV * 0.75 && sp > 120) { car.air = true; car.vz = car.gvz; car.airT = 0; car.z = h0; play('whoosh', 1, 0.7); } // the ground drops away faster than gravity: take off
     else car.z = h0;
     car.gvz = gvz;
-    if (car.safe <= 0 && Math.abs(sl) > PH.tip && sp > 60) { car.tip += (Math.abs(sl) - PH.tip) * 5 * dt * (0.6 + sp / 400); if (car.tip >= 1) startRoll(gx, gy); }
-    else car.tip = Math.max(0, car.tip - dt * 1.5);
+    if (car.air) { endDrift(); endTwo(); car.a0 = car.ang; car.trick = null; car.fp = car.fy = 0; if (car.vz > 0) car.vz *= 1.15; }
+    if (car.drift) { // points for how sideways and how fast; a full circle is a donut
+      car.dsc += Math.atan2(Math.abs(l), Math.abs(f) + 1) * sp * dt * 0.3; car.dyaw += yr * dt;
+      if (Math.abs(car.dyaw) > TAU) { car.dyaw -= Math.sign(car.dyaw) * TAU; car.dsc += 120; float(car.x, car.y - 150, T('st_donut'), '#ffe07a'); }
+      if (!want && Math.abs(l) < 30) endDrift();
+    }
+    // what tips the car: the slope across it, and the pull of a fast turn (much less while it is sliding)
+    const q = sl + f * yr / GR * (car.drift ? 0.15 : 0.62), ex = Math.abs(q) - PH.tip;
+    if (car.safe <= 0 && ex > 0 && sp > 60 && !car.air) { car.tip += ex * 3.2 * dt * (0.6 + sp / 400) * (1 - 0.5 * car.tip); // slower near the top, so there is a moment to catch it
+      car.tside = q > 0 ? 1 : -1; if (car.tip >= 1) startRoll(sn * car.tside, -cs * car.tside); }
+    else car.tip = Math.max(0, car.tip - dt * 1.3);
+    if (car.tip > 0.3 && !car.roll && !car.air) { car.twoT += dt; run.two += dt; } else if (car.twoT > 0) endTwo(); // on two wheels
     if (!car.roll && !car.air) {
-      if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06)) puff(car.x - cs * 38 + (Math.random() - 0.5) * 50 * sn, car.y - sn * 38 - (Math.random() - 0.5) * 50 * cs, -car.vx * 0.25, -car.vy * 0.25, 1); }
+      if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06) * (car.drift ? 4 : 1)) puff(car.x - cs * 38 + (Math.random() - 0.5) * 50 * sn, car.y - sn * 38 - (Math.random() - 0.5) * 50 * cs, -car.vx * 0.25, -car.vy * 0.25, 1, car.drift); }
       car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 27 : -27, a = tracks[s]; a.push(car.x - cs * 34 - sn * w, car.y - sn * 34 + cs * w); if (a.length > 520) a.splice(0, 2); } }
     }
   }
@@ -818,6 +864,7 @@ function update(dt) {
   const c2 = Math.cos(car.ang), s2 = Math.sin(car.ang), kt = Math.min(1, dt * 9);
   car.pit += ((car.air ? clamp(car.vz / 380, -0.5, 0.55) : car.roll ? 0 : Math.atan(gx * c2 + gy * s2)) - car.pit) * kt;
   car.rol += ((car.air || car.roll ? 0 : Math.atan(gy * c2 - gx * s2)) - car.rol) * kt;
+  car.lean += ((car.air || car.roll ? 0 : car.tside * clamp((car.tip - 0.1) / 0.9, 0, 1) * 0.62) - car.lean) * Math.min(1, dt * 10); // one side lifts as the car tips
   car.spin += (car.vx * c2 + car.vy * s2) / (12.5 * CS) * dt;
   const k = Math.min(1, dt * 4); camx += (car.x + car.vx * 0.3 - camx) * k; camy += (car.y + car.vy * 0.3 - camy) * k;
   engine(sp, thr);
@@ -830,10 +877,12 @@ function drawCar(c) {
   const f = car.vx * cs + car.vy * sn, l = -car.vx * sn + car.vy * cs, ss = 1 - Math.min(0.4, alt / 400);
   c.save(); c.translate(car.x + 7 + alt * 0.4, car.y + 9 + alt * 0.3); c.rotate(car.ang); c.scale(ss, ss);
   c.fillStyle = 'rgba(60,30,15,' + (0.3 - Math.min(0.15, alt / 800)) + ')'; c.beginPath(); c.roundRect(-52, -33, 104, 66, 18); c.fill(); c.restore();
-  const tumble = car.roll ? -car.rside * car.rollT / 1.15 * TAU * 2 : car.tip * 0.3 * Math.sin(t * 22);
-  drawCar3D(c, car.x, car.y, 1, { ang: car.ang, pit: car.pit, rol: car.rol + tumble, lift: alt + (car.roll ? 8 + Math.abs(Math.sin(tumble)) * 16 : 0), steer: car.steer, spin: car.spin,
+  const tumble = car.roll ? -car.rside * car.rollT / 1.15 * TAU * 2 : car.lean + car.tip * 0.05 * Math.sin(t * 24);
+  drawCar3D(c, car.x, car.y, 1, { ang: car.ang, pit: car.pit - car.fp, rol: car.rol + tumble, lift: alt + (car.roll ? 8 + Math.abs(Math.sin(tumble)) * 16 : Math.abs(Math.sin(car.lean)) * 34 + Math.abs(Math.sin(car.fp)) * 20), steer: car.steer, spin: car.spin,
     speed: f, lat: l, t, air: car.air && car.airT > 0.12, mouth: car.air || car.roll || car.tip > 0.35 ? 'o' : '', col });
-  if (car.tip > 0.35 && !car.roll) { c.fillStyle = SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 4; c.font = '800 32px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.strokeText('!', car.x, car.y - 122); c.fillText('!', car.x, car.y - 122); }
+  const live = car.drift && car.dsc > 12 ? T('st_drift') + ' ' + Math.round(car.dsc) : car.twoT > 0.25 ? T('st_two', car.twoT.toFixed(1)) : ''; // the stunt in progress, counted above the car
+  if (live) { c.font = '800 22px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.lineWidth = 5; c.strokeStyle = INK; c.strokeText(live, car.x, car.y - 150); c.fillStyle = '#ffe07a'; c.fillText(live, car.x, car.y - 150); }
+  if (car.tip > 0.7 && !car.roll) { c.fillStyle = SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 4; c.font = '800 32px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.strokeText('!', car.x, car.y - 122); c.fillText('!', car.x, car.y - 122); }
 }
 function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under everything else
   let s = site('oasis');
@@ -966,7 +1015,7 @@ function showMenu() {
 function startRun(rc) { // rc: a race to drive, or nothing for a free safari
   unlockAudio(); st = 'play'; resetCar(); for (const o of DATES) o.off = false; for (const o of CANS) o.off = false;
   const u = save.up; Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine), grip: GRIP + 0.45 * u.tyres, rr: RR - 2.5 * u.tyres, tip: TIP + 0.022 * u.balance, pick: (41 + 13 * u.magnet) ** 2 });
-  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
+  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
   $('distLbl').textContent = rc ? '' : T('m'); $('dateLbl').textContent = rc ? T('cp') : T('dates'); show('fuelBox', !rc);
@@ -981,9 +1030,9 @@ async function endRun(early) {
   if (st !== 'play' && st !== 'pause') return;
   const dn = run.done, raced = !!run.race;
   st = 'over'; joy.id = -1; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
-  const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.air), total = cS + cD + cA;
+  const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
   run.newBest = !raced && m > save.best; if (run.newBest) save.best = m; save.coins += total;
-  checkMissions(); addXP(m / 40 + run.dates / 2);
+  endDrift(); endTwo(); checkMissions(); addXP(m / 40 + run.dates / 2 + run.stunt / 25);
   for (const q of save.missions) if (!q.done && (q.t === 'tdates' || q.t === 'tdist')) q.p = Math.min(q.n, mProg(q)); // missions that add up over several runs keep their progress
   run.live = false; fillMissions(); persist();
   // ads hook, the same one the other Abood games offer: the results card waits for it, for 15 seconds at most
@@ -992,7 +1041,7 @@ async function endRun(early) {
   $('overMsg').textContent = raced ? (dn ? T('raceMsg', fmtTime(dn.tm), fmtTime(dn.best)) : T('raceQuitMsg')) : T('overMsg', m, run.dates);
   $('sDist').textContent = nf(m); $('sAir').textContent = air.toFixed(1); $('sBest').textContent = nf(save.best);
   $('swDates').textContent = nf(run.dates); $('swCoins').textContent = '+' + nf(total);
-  $('swPartS').textContent = T('partS', run.dates, cS); $('swPartD').textContent = T('partD', m, cD); $('swPartA').textContent = T('partA', air.toFixed(1), cA);
+  $('swPartS').textContent = T('partS', run.dates, cS); $('swPartD').textContent = T('partD', m, cD); $('swPartA').textContent = T('partA', run.stunt, cA);
   const extra = []; if (dn && dn.gain) extra.push(T('overMedal', dn.gain)); if (dn && dn.isBest) extra.push(T('overBestTime')); if (run.mdone) extra.push(T('overMis', run.mdone, run.mcoins)); if (run.lvlUp) extra.push(T('overLvl', run.lvlUp));
   if (run.cards.length) extra.push(T('overCards', run.cards.map(id => T('s_' + id)).join(getLang() === 'ar' ? '، ' : ', ')));
   const oc = $('overCards'); oc.hidden = !extra.length; oc.textContent = extra.join(' · ');
@@ -1089,6 +1138,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-lang
 const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !/iPhone|iPad/.test(navigator.userAgent)) { show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
+if (location.hash === '#debug') window.liwa = { car, run, save }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------

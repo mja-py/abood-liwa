@@ -33,6 +33,14 @@ The reserve is a circle 6.8 km of pixels across, ringed by red flags. A round ma
 
 Camels and oryx wander near home and trot away from a fast car.
 
+## Stunts
+
+Every stunt scores points, shown above the car. Fifty points are worth one dirham at the end of the run, and there are missions for each kind.
+
+- **Drift:** at speed, drag hard toward a new direction (keyboard: hold Space while steering). Grip drops, the car slides sideways under power and throws sand. Points grow with speed and angle. A full circle is a donut.
+- **Two wheels:** a fast turn, or driving across a slope, lifts one side of the car. Hold it there for points; ease the steering to come down, or it goes over. A drift sheds the tipping force, so sliding is the safe way round a fast corner.
+- **Spins and flips:** in the air, drag sideways to the jump for a 360 spin, or backwards for a backflip (keyboard: Space with left or right, Space with down, F for a front flip). Each trick is one full turn, paced to finish before landing, and only starts when the jump is long enough. Land on the wheels to bank it.
+
 ## Missions, levels and races
 
 What keeps a run worth starting once every postcard is found:
@@ -51,7 +59,7 @@ Drawn from the real animals of the Liwa sands: the dromedary with its rope halte
 
 In-game dirhams only; there are no real payments. Progress is saved on the device.
 
-- **End of run:** 10 dates = 1 dirham, plus 1 per 250 m driven, plus 1 per second in the air.
+- **End of run:** 10 dates = 1 dirham, plus 1 per 250 m driven, plus 1 per 50 stunt points.
 - **Postcards:** 10 to 58 dirhams each, once, more for places far from the camp.
 - **Garage:** five car colours (white is free; 150, 300, 500, 1,000) and the five upgrades.
 
