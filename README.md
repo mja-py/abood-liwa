@@ -37,9 +37,9 @@ Camels and oryx wander near home and trot away from a fast car.
 
 Every stunt scores points, shown above the car. Fifty points are worth one dirham at the end of the run, and there are missions for each kind.
 
-- **Drift:** at speed, drag hard toward a new direction (keyboard: hold Space while steering). Grip drops, the car slides sideways under power and throws sand. Points grow with speed and angle. A full circle is a donut.
-- **Two wheels:** a fast turn, or driving across a slope, lifts one side of the car. Hold it there for points; ease the steering to come down, or it goes over. A drift sheds the tipping force, so sliding is the safe way round a fast corner.
-- **Spins and flips:** in the air, drag sideways to the jump for a 360 spin, or backwards for a backflip (keyboard: Space with left or right, Space with down, F for a front flip). Each trick is one full turn, paced to finish before landing, and only starts when the jump is long enough. Land on the wheels to bank it.
+- **Drift:** at speed, hold the red Drift button while you turn (keyboard: hold Space while steering). Steering alone never starts a stunt. Grip drops, the car slides sideways under power and throws sand. Points grow with speed and angle. A full circle is a donut.
+- **Two wheels:** a fast turn, or driving across a slope, lifts one side of the car. Hold it there for points. On level sand the car cannot go over from turning alone; on a slope it can. A drift sheds the tipping force, so sliding is the safe way round a fast corner.
+- **Spins and flips:** in the air, press the Drift button for a backflip, or hold it and drag across the jump for a 360 spin (keyboard: Space with left or right, Space with down, F for a front flip). Each trick is one full turn, paced to finish before landing, and only starts when the jump is long enough. Land on the wheels to bank it.
 
 ## Missions, levels and races
 

@@ -624,6 +624,7 @@ let st = 'load', t = 0, W = 0, Hh = 0, zoom = 1, dpr = 1, rs = 1, camx = 0, camy
 const car = {}, run = { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], fuel: 100, max: 100, over: 0, low: false, seen: {}, vis: [], live: false };
 const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700 }; // what the upgrades change, set at the start of a run
 const parts = [], floats = [], tracks = [[], []], keys = {}, joy = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
+let btnHb = false; // the on-screen Drift button is held
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // base values; see PH
    TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, TIP = 0.4;
 function resetCar() {
@@ -749,11 +750,11 @@ function update(dt) {
     camx = car.x; camy = car.y; engine(0, 0.3); return;
   }
   let thr = 0, steer = 0, hb = false, spinIn = 0, flipIn = 0; // hb: handbrake, which starts a drift
-  if (joy.id >= 0) { // touch: drag the way you want to go. A sharp change of direction at speed is a drift.
-    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = Math.hypot(dx, dy);
-    if (m > 8) { const d = wrap(Math.atan2(dy, dx) - car.ang); steer = clamp(d * 2.4, -1, 1); thr = clamp(m / JOY_R, 0.25, 1) * (Math.abs(d) > 2 ? 0.55 : 1); hb = Math.abs(d) > 0.9 && Math.abs(d) < 2.5;
-      // in the air the drag is read against the take-off direction: sideways spins the car, backwards flips it
-      const k = Math.min(1, m / JOY_R) / m, c0 = Math.cos(car.a0), s0 = Math.sin(car.a0), al = (dx * c0 + dy * s0) * k, ac = (dy * c0 - dx * s0) * k; if (Math.abs(ac) > 0.5) spinIn = Math.sign(ac); if (al < -0.5) flipIn = -1; }
+  if (joy.id >= 0 || btnHb) { // touch: drag the way you want to go. Stunts only happen while the Drift button is held, so steering alone never starts one.
+    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = joy.id >= 0 ? Math.hypot(dx, dy) : 0; hb = btnHb;
+    if (m > 8) { const d = wrap(Math.atan2(dy, dx) - car.ang); steer = clamp(d * 2.4, -1, 1); thr = clamp(m / JOY_R, 0.25, 1) * (Math.abs(d) > 2 ? 0.55 : 1);
+      if (hb) { const c0 = Math.cos(car.a0), s0 = Math.sin(car.a0); if (Math.abs(dy * c0 - dx * s0) > 0.6 * m) spinIn = Math.sign(dy * c0 - dx * s0); } } // in the air: button and a drag across the jump is a spin
+    if (hb && !spinIn) flipIn = -1;                                                                                                                         // button alone in the air is a backflip
   } else { thr = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0); steer = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
     hb = !!(keys.Space || keys.ShiftLeft || keys.ShiftRight); if (hb) { spinIn = steer; flipIn = steer ? 0 : thr < 0 ? -1 : 0; } if (keys.KeyF) flipIn = 1; } // keyboard: hold Space for a drift; in the air Space with left or right spins, Space with down is a backflip, F a front flip
   if (run.fuel <= 0) thr = 0;
@@ -772,7 +773,7 @@ function update(dt) {
     const left = (car.vz + Math.sqrt(Math.max(0, car.vz * car.vz + 2 * GRAV * Math.max(0, car.z - h0)))) / GRAV; // seconds until landing, on level ground
     if (!car.trick && (flipIn || spinIn) && left > 0.42) car.trick = { flip: flipIn, spin: flipIn ? 0 : spinIn, rate: Math.min(17, TAU / Math.max(0.36, left * 0.78)), left: TAU };
     if (car.trick) { const tk = car.trick, d = Math.min(tk.left, tk.rate * dt); tk.left -= d; car.fp += tk.flip * d; car.fy += tk.spin * d; car.ang += tk.spin * d; if (tk.left <= 0) car.trick = null; } // fp: how far the car has flipped, nose down positive
-    else car.ang += car.steer * 0.9 * dt;
+    else car.ang += car.steer * 0.25 * dt; // barely any steering in the air, so a jump lands pointing the way it is travelling
     if (car.vz < 0 && (car.z - h0) / Math.max(60, -car.vz) < 0.22) { const e = wrap(car.fp); if (Math.abs(e) < 1.1) car.fp -= e * Math.min(1, dt * 14); } // close to the ground: ease the wheels level
     if (car.z <= h0) { // landing
       const cs = Math.cos(car.ang), sn = Math.sin(car.ang), l = -car.vx * sn + car.vy * cs, sl = -gx * sn + gy * cs, gm = Math.hypot(gx, gy), upside = Math.abs(wrap(car.fp)) > 0.8;
@@ -813,6 +814,7 @@ function update(dt) {
     // what tips the car: the slope across it, and the pull of a fast turn (much less while it is sliding)
     const q = sl + f * yr / GR * (car.drift ? 0.15 : 0.62), ex = Math.abs(q) - PH.tip;
     if (car.safe <= 0 && ex > 0 && sp > 60 && !car.air) { car.tip += ex * 3.2 * dt * (0.6 + sp / 400) * (1 - 0.5 * car.tip); // slower near the top, so there is a moment to catch it
+      if (Math.abs(sl) < PH.tip * 0.6) car.tip = Math.min(car.tip, 0.8); // a fast turn on level sand lifts two wheels but cannot roll the car on its own
       car.tside = q > 0 ? 1 : -1; if (car.tip >= 1) startRoll(sn * car.tside, -cs * car.tside); }
     else car.tip = Math.max(0, car.tip - dt * 1.3);
     if (car.tip > 0.3 && !car.roll && !car.air) { car.twoT += dt; run.two += dt; } else if (car.twoT > 0) endTwo(); // on two wheels
@@ -1009,7 +1011,7 @@ function muteUI() { $('menuMute').innerHTML = save.muted ? ICON_OFF : ICON_ON; $
 function toggleMute() { save.muted = !save.muted; persist(); unlockAudio(); muteUI(); }
 function showMenu() {
   st = 'menu'; resetCar(); for (const o of DATES) o.off = false; for (const o of CANS) o.off = false;
-  ['hud', 'miniBtn', 'pauseBtn', 'mute', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
+  ['hud', 'miniBtn', 'pauseBtn', 'mute', 'driftBtn', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
   const b = $('menuBest'); b.hidden = !save.best; b.textContent = T('best', save.best); releaseWake();
 }
 function startRun(rc) { // rc: a race to drive, or nothing for a free safari
@@ -1020,8 +1022,8 @@ function startRun(rc) { // rc: a race to drive, or nothing for a free safari
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
   $('distLbl').textContent = rc ? '' : T('m'); $('dateLbl').textContent = rc ? T('cp') : T('dates'); show('fuelBox', !rc);
   const mi = $('mis'); mi.hidden = !rc; if (rc) mi.textContent = T('raceHud', T('r_' + rc.id), fmtTime(raceTargets(rc)[2]));
-  camx = car.x; camy = car.y; hudKey = ''; joy.id = -1; for (const k in keys) keys[k] = 0;
-  ['menu', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); ['hud', 'miniBtn', 'pauseBtn', 'mute'].forEach(id => show(id, true));
+  camx = car.x; camy = car.y; hudKey = ''; joy.id = -1; btnHb = false; $('driftBtn').classList.remove('on'); for (const k in keys) keys[k] = 0;
+  ['menu', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); ['hud', 'miniBtn', 'pauseBtn', 'mute', 'driftBtn'].forEach(id => show(id, true));
   save.runs++; persist(); drawMap($('mini')); wake();
 }
 function pause() { if (st !== 'play') return; st = 'pause'; joy.id = -1; show('pausePop', true); releaseWake(); }
@@ -1029,7 +1031,7 @@ function resume() { if (st !== 'pause') return; st = 'play'; show('pausePop', fa
 async function endRun(early) {
   if (st !== 'play' && st !== 'pause') return;
   const dn = run.done, raced = !!run.race;
-  st = 'over'; joy.id = -1; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
+  st = 'over'; joy.id = -1; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'driftBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
   const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
   run.newBest = !raced && m > save.best; if (run.newBest) save.best = m; save.coins += total;
   endDrift(); endTwo(); checkMissions(); addXP(m / 40 + run.dates / 2 + run.stunt / 25);
@@ -1123,10 +1125,15 @@ addEventListener('keydown', e => {
   if (e.code === 'Enter' && $('sheet').hidden && $('langPick').hidden) { if (st === 'menu') startRun(); else if (st === 'over') startRun(run.race); else if (st === 'pause') resume(); }
 });
 addEventListener('keyup', e => { keys[e.code] = 0; });
-cv.addEventListener('pointerdown', e => { if (st !== 'play' || joy.id >= 0) return; unlockAudio(); joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; try { cv.setPointerCapture(e.pointerId); } catch (err) {} });
+cv.addEventListener('pointerdown', e => { if (st !== 'play') return; unlockAudio(); joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; try { cv.setPointerCapture(e.pointerId); } catch (err) {} }); // the newest finger takes over, so steering can never get stuck on a lost one
 cv.addEventListener('pointermove', e => { if (e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
 const joyEnd = e => { if (e.pointerId === joy.id) joy.id = -1; };
-cv.addEventListener('pointerup', joyEnd); cv.addEventListener('pointercancel', joyEnd);
+for (const ev of ['pointerup', 'pointercancel']) { cv.addEventListener(ev, joyEnd); addEventListener(ev, joyEnd); }
+addEventListener('blur', () => { joy.id = -1; btnHb = false; for (const k in keys) keys[k] = 0; });
+// the Drift button: hold it to slide, and in the air to flip or spin
+const db = $('driftBtn'), dbSet = on => e => { e.preventDefault(); btnHb = on; db.classList.toggle('on', on); if (on) { unlockAudio(); try { db.setPointerCapture(e.pointerId); } catch (err) {} } };
+db.addEventListener('pointerdown', dbSet(true)); for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) db.addEventListener(ev, dbSet(false));
+db.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 $('startBtn').onclick = () => startRun(); $('againBtn').onclick = () => startRun(run.race); $('overMenuBtn').onclick = showMenu;
@@ -1138,7 +1145,7 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-lang
 const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !/iPhone|iPad/.test(navigator.userAgent)) { show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, get hb() { return btnHb; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------

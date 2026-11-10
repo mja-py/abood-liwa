@@ -209,3 +209,10 @@ body:has(#menu:not([hidden])) #mute{display:none} /* the menu has its own sound 
 .rrow .btn{min-height:42px;font-size:17px;padding:2px 14px} .rrow .btn[disabled]{background:#d9cfbd;color:#6b5a48;box-shadow:0 2px 0 var(--ink);cursor:default}
 .pips{display:inline-flex;gap:4px} .pips i{width:11px;height:11px;border-radius:50%;border:2px solid var(--ink);background:var(--cream)} .pips i.on{background:var(--teal)}
 @media (max-width:640px){ #mis{top:calc(196px + env(safe-area-inset-top,0px));max-width:calc(100% - 32px)} }
+/* the Drift button, under the left thumb: hold to slide, and in the air to flip or spin */
+#driftBtn{position:fixed;left:max(16px, env(safe-area-inset-left,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));width:84px;height:84px;border-radius:50%;border:3px solid var(--ink);background:var(--shemagh);color:var(--cream);
+  font:800 17px var(--display);box-shadow:0 5px 0 var(--ink);cursor:pointer;padding:0;touch-action:none;opacity:.92}
+#driftBtn.on{transform:translateY(4px);box-shadow:0 1px 0 var(--ink);background:#8e141d}
+#driftBtn:focus-visible{outline:3px solid var(--teal);outline-offset:3px}
+@media (max-height:440px){ #driftBtn{width:72px;height:72px;font-size:15px} }
+@media (max-width:440px){ .menu .lvp{display:none} }
