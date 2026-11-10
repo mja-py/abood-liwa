@@ -218,3 +218,9 @@ body:has(#menu:not([hidden])) #mute{display:none} /* the menu has its own sound 
 #driftBtn:focus-visible{outline:3px solid var(--teal);outline-offset:3px}
 @media (max-height:440px){ #driftBtn{width:72px;height:72px;font-size:15px} }
 @media (max-width:440px){ .menu .lvp{display:none} }
+.diag{margin:0;font-size:11px;font-weight:700;opacity:.5;direction:ltr;text-align:center;font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text}
+/* missions: difficulty stars, and the button that swaps a mission for another */
+.mrow{grid-template-columns:1fr auto auto}
+.stars{color:#e0a72a;letter-spacing:1px;-webkit-text-stroke:.7px var(--ink);white-space:nowrap}
+.mswap{grid-column:3;grid-row:1 / span 2;align-self:center;border:2px solid var(--ink);border-radius:10px;background:var(--cream);color:var(--ink);font:800 12px var(--display);padding:5px 9px;cursor:pointer;box-shadow:0 2px 0 var(--ink);white-space:nowrap}
+.mswap:active{transform:translateY(2px);box-shadow:none} .mswap:focus-visible{outline:3px solid var(--teal);outline-offset:2px}

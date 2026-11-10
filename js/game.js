@@ -13,10 +13,13 @@ const nf = n => Math.round(n).toLocaleString('en-US');
 const pick = a => a[Math.random() * a.length | 0];
 const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
 const coarse = matchMedia('(pointer: coarse)').matches;
+const BUILD = '__BUILD__', UA = navigator.userAgent;
+const IOS = /iPhone|iPad|iPod/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1); // an iPad says it is a Mac, so count the fingers it can feel
+const APP = !!navigator.standalone || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches; // opened from the home screen
 
 // ---------- save data ----------
 const SAVE_KEY = 'abood-liwa-v1';
-const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], tank: 0, muted: false, runs: 0, xp: 0, lvl: 1, up: {}, missions: [], medals: {}, times: {}, day: '', streak: 0 };
+const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], tank: 0, muted: false, runs: 0, xp: 0, lvl: 1, up: {}, missions: [], mrec: [], medals: {}, times: {}, day: '', streak: 0 };
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 save.up = Object.assign({ engine: 0, tyres: 0, balance: 0, tank: Math.min(5, save.tank || 0), magnet: 0 }, save.up);
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
@@ -623,7 +626,7 @@ const PROPS = [], DATES = [], CANS = [], ANIMALS = [];
 let st = 'load', t = 0, W = 0, Hh = 0, zoom = 1, dpr = 1, rs = 1, camx = 0, camy = 0, shake = 0, noteT = 0, slow = 0, hudKey = '', miniTick = 0, edgeT = 0, hitT = 0;
 const car = {}, run = { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], fuel: 100, max: 100, over: 0, low: false, seen: {}, vis: [], live: false };
 const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700 }; // what the upgrades change, set at the start of a run
-const parts = [], floats = [], tracks = [[], []], keys = {}, joy = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
+const parts = [], floats = [], tracks = [[], []], keys = {}, joy = { on: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 };
 let btnHb = false; // the on-screen Drift button is held
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // base values; see PH
    TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, TIP = 0.4;
@@ -656,53 +659,80 @@ function addXP(n) {
   save.xp += Math.round(n);
   while (save.xp >= xpNeed(save.lvl)) { save.xp -= xpNeed(save.lvl); save.lvl++; const c = 20 * save.lvl; save.coins += c; run.lvlUp = save.lvl; note(T('lvlUp', save.lvl, c), 'card', 3.2); play('zone', 1.2); }
 }
+// Missions are dealt at random from the kinds below. Each kind has: its category, the level it first appears at, its target at
+// level 1, how much the target grows per level, a cap, a rounding step, and a prize weight. Three things make missions harder as the
+// level rises: targets grow, hard (three-star) missions get more likely, and from level 5 some must be done without rolling the car.
+// Categories: c collecting, d driving, s stunts, e exploring, r races, t adds up over several runs.
+const MK = {
+  dates: ['c', 1, 20, 5, 100, 5, 1], rush: ['c', 3, 10, 2, 36, 1, 1.3], cans: ['c', 2, 1, 0.34, 6, 1, 1], earn: ['c', 4, 15, 4, 110, 5, 1.2],
+  dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 180, 15, 410, 10, 1],
+  air: ['s', 1, 2.5, 0.5, 12, 0.5, 1.2], jump: ['s', 1, 0.6, 0.05, 1.6, 0.1, 1.2], drift: ['s', 1, 280, 80, 3000, 20, 1.2], bigdrift: ['s', 3, 120, 20, 500, 10, 1.3],
+  donut: ['s', 3, 1, 0.3, 5, 1, 1.3], two: ['s', 2, 2, 0.4, 10, 0.5, 1.4], twohold: ['s', 4, 1, 0.12, 3, 0.1, 1.5], flip: ['s', 2, 1, 0.2, 4, 1, 1.5],
+  spin: ['s', 2, 1, 0.25, 5, 1, 1.3], stunt: ['s', 1, 550, 150, 8000, 50, 1.2], combo: ['s', 2, 2, 0.34, CH_MAX, 1, 1.3],
+  visit: ['e', 1, 2, 0.5, 8, 1, 1.2], goto: ['e', 1, 1, 0, 1, 1, 1], dash: ['e', 3, 1, 0, 1, 1, 1.4], deliver: ['e', 2, 2, 0, 2, 1, 1.5], summit: ['e', 3, 1, 0, 1, 1, 1.5], reem: ['e', 2, 3, 0.6, 10, 1, 1.2],
+  race: ['r', 2, 1, 0, 1, 1, 1.3], medal: ['r', 3, 1, 0.2, 3, 1, 1.6],
+  tdates: ['t', 2, 110, 30, 1e9, 10, 1.4], tdist: ['t', 2, 3600, 600, 1e9, 100, 1.4], tstunt: ['t', 3, 2500, 600, 1e9, 100, 1.4], tair: ['t', 3, 12, 2.5, 1e9, 1, 1.4], tvisit: ['t', 3, 8, 1.5, 1e9, 1, 1.4],
+};
+const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1, two: 1, twohold: 1 }; // how often each category is dealt; the kinds counted in tenths
+const slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
 function newMission() {
-  const L = save.lvl, have = save.missions.map(m => m.t), r1 = x => Math.round(x * 10) / 10;
-  const t = pick(['dates', 'dist', 'air', 'jump', 'visit', 'noroll', 'cans', 'deliver', 'summit', 'tdates', 'tdist', 'drift', 'two', 'flip', 'spin', 'stunt', 'combo'].filter(k => !have.includes(k))), m = { t, n: 1, p: 0 }; let w = 1;
-  if (t === 'dates') m.n = Math.min(90, 15 + L * 5);
-  else if (t === 'dist') m.n = Math.min(4500, 600 + L * 200);
-  else if (t === 'air') { m.n = Math.min(12, r1(2 + L * 0.5)); w = 1.2; }
-  else if (t === 'jump') { m.n = Math.min(1.6, r1(0.6 + L * 0.05)); w = 1.2; }
-  else if (t === 'visit') { m.n = Math.min(8, 2 + (L >> 1)); w = 1.2; }
-  else if (t === 'noroll') m.n = Math.min(3000, 500 + L * 150);
-  else if (t === 'cans') m.n = Math.min(6, 1 + (L / 3 | 0));
-  else if (t === 'deliver') { const ids = SITES.map(s => s.id).filter(id => id !== 'moreeb'); m.a = pick(ids); m.b = pick(ids.filter(id => id !== m.a)); m.n = 2; w = 1.5; }
-  else if (t === 'summit') w = 1.5;
-  else if (t === 'drift') { m.n = Math.min(3000, 200 + L * 80); w = 1.2; }
-  else if (t === 'two') { m.n = Math.min(10, r1(1.5 + L * 0.4)); w = 1.4; }
-  else if (t === 'flip') { m.n = Math.min(4, 1 + (L / 5 | 0)); w = 1.5; }
-  else if (t === 'spin') { m.n = Math.min(5, 1 + (L / 4 | 0)); w = 1.3; }
-  else if (t === 'stunt') { m.n = Math.min(6000, 400 + L * 150); w = 1.2; }
-  else if (t === 'combo') { m.n = Math.min(CH_MAX, 2 + (L / 3 | 0)); w = 1.3; }
-  else if (t === 'tdates') { m.n = 80 + L * 30; w = 1.4; }
-  else { m.n = 3000 + L * 600; w = 1.4; }
-  m.rw = Math.round((25 + L * 5) * w / 5) * 5; m.xp = Math.round(40 * w); return m;
+  const L = save.lvl, act = save.missions, catN = c => act.filter(m => MK[m.t][0] === c).length;
+  let pool = Object.keys(MK).filter(k => MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
+  const fresh = pool.filter(k => !save.mrec.includes(k)); if (fresh.length >= 4) pool = fresh;                                         // not one you had a moment ago
+  const cats = [...new Set(pool.map(k => MK[k][0]))], low = Math.min(...cats.map(catN)), want = cats.filter(c => catN(c) === low);      // spread across the categories
+  let roll = Math.random() * want.reduce((sum, c) => sum + CAT_W[c], 0), cat = want[0]; for (const c of want) { roll -= CAT_W[c]; if (roll < 0) { cat = c; break; } }
+  const t = pick(pool.filter(k => MK[k][0] === cat)), [, , base, grow, cap, stepN, w0] = MK[t];
+  const hard = clamp(0.05 + 0.03 * L, 0, 0.45), easy = clamp(0.45 - 0.04 * L, 0.1, 0.45), r = Math.random(), d = r < hard ? 3 : r > 1 - easy ? 1 : 2; // one, two or three stars
+  const Le = Math.max(1, L + [-2, 0, 4][d - 1]), m = { t, n: 1, p: 0, d }; let w = w0;                                                   // an easy mission is set as if two levels lower, a hard one four higher
+  m.n = Math.min(cap, Math.max(base, Math.round((base + grow * (Le - 1)) * (0.9 + Math.random() * 0.2) / stepN) * stepN)); if (DEC[t]) m.n = Math.round(m.n * 10) / 10;
+  if (t === 'goto' || t === 'dash') { // a place to drive to: further out as the level rises, and for a dash, against the clock
+    const near = SITES.filter(q => q.id !== 'camp' && !q.hill).sort((q1, q2) => Math.hypot(q1.x, q1.y) - Math.hypot(q2.x, q2.y)), q = pick(near.slice(0, Math.min(near.length, 2 + Le))), far = Math.hypot(q.x, q.y);
+    m.a = q.id; w += far / R * 0.5; if (t === 'dash') m.s = Math.ceil(far / Math.min(230, 140 + 10 * Le)) + 3;
+  } else if (t === 'deliver') { const ids = SITES.map(q => q.id).filter(id => id !== 'moreeb'); m.a = pick(ids); m.b = pick(ids.filter(id => id !== m.a)); }
+  if (L >= 5 && 'cds'.includes(cat) && t !== 'noroll' && Math.random() < (d === 3 ? 0.3 : 0.15)) { m.nr = 1; w *= 1.35; }                 // the twist: do it without rolling
+  m.rw = Math.max(5, Math.round((25 + L * 5) * w * [0.75, 1, 1.5][d - 1] / 5) * 5); m.xp = Math.round(40 * w * [0.8, 1, 1.4][d - 1]);
+  save.mrec.push(t); if (save.mrec.length > 8) save.mrec.shift(); return m;
 }
-function fillMissions() { save.missions = save.missions.filter(m => !m.done); while (save.missions.length < 3) save.missions.push(newMission()); }
+function fillMissions() { save.missions = save.missions.filter(m => !m.done && MK[m.t]); while (save.missions.length < slots()) save.missions.push(newMission()); }
 function mProg(m) { // how far a mission has got, counting the run in progress
-  const on = run.live;
+  const on = run.live; if (MK[m.t][0] !== 't' && (!on || (m.nr && run.rolls))) return 0; // after a roll, a no-roll mission starts again on the next run
   switch (m.t) {
-    case 'dates': return on ? run.dates : 0;
-    case 'dist': return on ? run.dist / 8 : 0;
-    case 'air': return on ? run.air : 0;
-    case 'jump': return on ? run.maxAir : 0;
-    case 'visit': return on ? Object.keys(run.seen).length : 0;
-    case 'noroll': return on ? run.noRoll / 8 : 0;
-    case 'cans': return on ? run.cans : 0;
-    case 'drift': return on ? run.drift + car.dsc : 0;
-    case 'two': return on ? run.two : 0;
-    case 'flip': return on ? run.flips : 0;
-    case 'spin': return on ? run.spins : 0;
-    case 'stunt': return on ? run.stunt : 0;
-    case 'combo': return on ? run.combo : 0;
-    case 'deliver': { if (!on) return 0; const i = run.vis.indexOf(m.a); return i < 0 ? 0 : run.vis.indexOf(m.b, i + 1) >= 0 ? 2 : 1; }
-    case 'summit': return on && run.seen.moreeb ? 1 : 0;
+    case 'dates': return run.dates;
+    case 'rush': return run.d60;
+    case 'cans': return run.cans;
+    case 'earn': return Math.floor(run.dates / 10) + Math.floor(run.dist / 2000) + Math.floor(run.stunt / 50);
+    case 'dist': return run.dist / 8;
+    case 'noroll': return run.noRoll / 8;
+    case 'speed': return run.maxSp * 0.45;
+    case 'far': return run.far / 8;
+    case 'air': return run.air;
+    case 'jump': return run.maxAir;
+    case 'drift': return run.drift + car.dsc;
+    case 'bigdrift': return Math.max(run.maxDrift, car.dsc);
+    case 'donut': return run.donuts;
+    case 'two': return run.two;
+    case 'twohold': return Math.max(run.maxTwo, car.twoT);
+    case 'flip': return run.flips;
+    case 'spin': return run.spins;
+    case 'stunt': return run.stunt;
+    case 'combo': return run.combo;
+    case 'visit': return Object.keys(run.seen).length;
+    case 'goto': return run.seen[m.a] ? 1 : 0;
+    case 'dash': return run.seenT[m.a] <= m.s ? 1 : 0;
+    case 'deliver': { const i = run.vis.indexOf(m.a); return i < 0 ? 0 : run.vis.indexOf(m.b, i + 1) >= 0 ? 2 : 1; }
+    case 'summit': return run.seen.moreeb ? 1 : 0;
+    case 'reem': return run.reem;
+    case 'race': return run.done ? 1 : 0;
+    case 'medal': return run.done ? run.done.medal : 0;
     case 'tdates': return m.p + (on ? run.dates : 0);
-    default: return m.p + (on ? run.dist / 8 : 0);
+    case 'tdist': return m.p + (on ? run.dist / 8 : 0);
+    case 'tstunt': return m.p + (on ? run.stunt : 0);
+    case 'tair': return m.p + (on ? run.air : 0);
+    default: return m.p + (on ? Object.keys(run.seen).length : 0); // tvisit
   }
 }
-const mText = m => m.t === 'deliver' ? T('m_deliver', T('s_' + m.a), T('s_' + m.b)) : T('m_' + m.t, m.n);
-const mVal = (m, v) => m.t === 'air' || m.t === 'jump' || m.t === 'two' ? v.toFixed(1) : nf(Math.floor(v));
+const mText = m => (m.t === 'deliver' ? T('m_deliver', T('s_' + m.a), T('s_' + m.b)) : m.t === 'goto' ? T('m_goto', T('s_' + m.a)) : m.t === 'dash' ? T('m_dash', T('s_' + m.a), m.s) : T('m_' + m.t, m.n)) + (m.nr ? T('m_nr') : '');
+const mVal = (m, v) => DEC[m.t] ? v.toFixed(1) : nf(Math.floor(v));
 function checkMissions() {
   for (const m of save.missions) if (!m.done && mProg(m) >= m.n) {
     m.done = 1; save.coins += m.rw; run.mdone++; run.mcoins += m.rw; addXP(m.xp); persist(); coinsUI(); play('zone'); note(T('mDone', mText(m), m.rw), 'card', 3.4);
@@ -745,8 +775,8 @@ function stunt(pts, label) {
   if (counts) { run.chain = Math.min(CH_MAX, run.chain + 1); run.chainT = CH_WIN; if (m > run.combo) run.combo = m; }
   run.stunt += total; float(car.x, car.y - 125, label + ' +' + total + (m > 1 ? ' ×' + m : ''), m > 1 ? '#ffb84a' : '#ffe07a'); play('date', 0.75 + (m - 1) * 0.09, 1.2); if (m > 1) buzz(15);
 }
-function endDrift() { if (!car.drift) return; car.drift = false; if (car.dsc > 20) { run.drift += car.dsc; stunt(car.dsc, T('st_drift')); } car.dsc = 0; }
-function endTwo() { if (car.twoT > 0.4) stunt(car.twoT * 70, T('st_two', car.twoT.toFixed(1))); car.twoT = 0; }
+function endDrift() { if (!car.drift) return; car.drift = false; if (car.dsc > 20) { run.drift += car.dsc; if (car.dsc > run.maxDrift) run.maxDrift = car.dsc; stunt(car.dsc, T('st_drift')); } car.dsc = 0; }
+function endTwo() { if (car.twoT > run.maxTwo) run.maxTwo = car.twoT; if (car.twoT > 0.4) stunt(car.twoT * 70, T('st_two', car.twoT.toFixed(1))); car.twoT = 0; }
 function startRoll(dx, dy) { // the car goes over and tumbles in the direction (dx, dy)
   endDrift(); car.twoT = 0;
   const m = Math.hypot(dx, dy) || 1; car.roll = 1; car.rollT = 0; car.rdx = dx / m; car.rdy = dy / m; car.rside = car.rdy * Math.cos(car.ang) - car.rdx * Math.sin(car.ang) < 0 ? -1 : 1; car.air = false; car.tip = 0; car.fp = car.fy = 0;
@@ -761,8 +791,8 @@ function update(dt) {
     camx = car.x; camy = car.y; engine(0, 0.3); return;
   }
   let thr = 0, steer = 0, hb = false, spinIn = 0, flipIn = 0; // hb: handbrake, which starts a drift
-  if (joy.id >= 0 || btnHb) { // touch: drag the way you want to go. Stunts only happen while the Drift button is held, so steering alone never starts one.
-    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = joy.id >= 0 ? Math.hypot(dx, dy) : 0; hb = btnHb;
+  if (joy.on || btnHb) { // touch: drag the way you want to go. Stunts only happen while the Drift button is held, so steering alone never starts one.
+    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = joy.on ? Math.hypot(dx, dy) : 0; hb = btnHb;
     if (m > 8) { const d = wrap(Math.atan2(dy, dx) - car.ang); steer = clamp(d * 2.4, -1, 1); thr = clamp(m / JOY_R, 0.25, 1) * (Math.abs(d) > 2 ? 0.55 : 1);
       if (hb) { const c0 = Math.cos(car.a0), s0 = Math.sin(car.a0); if (Math.abs(dy * c0 - dx * s0) > 0.6 * m) spinIn = Math.sign(dy * c0 - dx * s0); } } // in the air: button and a drag across the jump is a spin
     if (hb && !spinIn) flipIn = -1;                                                                                                                         // button alone in the air is a backflip
@@ -819,7 +849,7 @@ function update(dt) {
     if (car.air) { endDrift(); endTwo(); car.a0 = car.ang; car.trick = null; car.fp = car.fy = 0; if (car.vz > 0) car.vz *= 1.15; }
     if (car.drift) { // points for how sideways and how fast; a full circle is a donut
       car.dsc += Math.atan2(Math.abs(l), Math.abs(f) + 1) * sp * dt * 0.3; car.dyaw += yr * dt;
-      if (Math.abs(car.dyaw) > TAU) { car.dyaw -= Math.sign(car.dyaw) * TAU; car.dsc += 120; float(car.x, car.y - 150, T('st_donut'), '#ffe07a'); }
+      if (Math.abs(car.dyaw) > TAU) { car.dyaw -= Math.sign(car.dyaw) * TAU; car.dsc += 120; run.donuts++; float(car.x, car.y - 150, T('st_donut'), '#ffe07a'); }
       if (!want && Math.abs(l) < 30) endDrift();
     }
     // what tips the car: the slope across it, and the pull of a fast turn (much less while it is sliding)
@@ -837,7 +867,7 @@ function update(dt) {
   if (run.chain && !car.air && !car.drift && car.twoT <= 0 && (run.chainT -= dt) <= 0) run.chain = 0; // the combo clock runs only between stunts
   if ((car.air || car.roll) && tracks[0].length && !isNaN(tracks[0][tracks[0].length - 1])) { tracks[0].push(NaN, NaN); tracks[1].push(NaN, NaN); } // break the tyre marks
   // the rim of the reserve turns the buggy back
-  const d = Math.hypot(car.x, car.y);
+  const d = Math.hypot(car.x, car.y); run.t += dt; if (d > run.far) run.far = d; if (sp > run.maxSp) run.maxSp = sp; // for the missions: the clock, how far from the camp, top speed
   if (d > R - 30) { const k = (d - (R - 30)) * 5 * dt; car.vx -= car.x / d * k * 60; car.vy -= car.y / d * k * 60; if (d > R + 60) { car.x *= (R + 60) / d; car.y *= (R + 60) / d; } if (edgeT <= 0) { note(T('edge'), '', 2); edgeT = 4; } }
   edgeT -= dt; hitT -= dt;
   // solid things: bump and slow down
@@ -848,6 +878,7 @@ function update(dt) {
   for (const a of ANIMALS) { // animals wander near home and trot away from a fast buggy
     const dx = a.x - car.x, dy = a.y - car.y, dc = Math.hypot(dx, dy);
     const shy = a.kind === 'gazelle'; // gazelles bolt early and fast; camels and oryx only step aside
+    if (shy && dc < 240 && !a.seen) { a.seen = 1; run.reem++; } // each gazelle counts once a run for the gazelle mission
     if (dc < (shy ? 230 : 115) && sp > (shy ? 60 : 110) && a.run <= 0) { a.run = shy ? 2.2 : 1.5; a.rx = dx / (dc || 1); a.ry = dy / (dc || 1); }
     let mx = 0, my = 0;
     if (a.run > 0) { a.run -= dt; mx = a.rx * (shy ? 210 : 90); my = a.ry * (shy ? 210 : 90); }
@@ -857,11 +888,11 @@ function update(dt) {
     if (dc < 60) bump(a, 8);
   }
   // pick-ups
-  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; play('date', 1 + (run.dates % 8) * 0.06); } }
+  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; play('date', 1 + (run.dates % 8) * 0.06); } }
   for (const o of CANS) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < 2200) { o.off = true; run.cans++; run.fuel = Math.min(run.max, run.fuel + 26); run.low = false; play('power'); float(o.x, o.y - 30, T('canPlus'), '#bff0c0'); } }
   let cur = '';
   for (const s of SITES) { const dx = s.x - car.x, dy = s.y - car.y, rr = reach(s); if (dx * dx + dy * dy >= rr * rr) continue; cur = s.id;
-    if (!run.seen[s.id]) { run.seen[s.id] = 1; if (!save.cards.includes(s.id)) { save.cards.push(s.id); save.coins += s.coins; run.cards.push(s.id); addXP(30); persist(); coinsUI(); play('zone'); note(T('found', T('s_' + s.id), s.coins), 'card', 3.2); } } }
+    if (!run.seen[s.id]) { run.seen[s.id] = 1; run.seenT[s.id] = run.t; if (!save.cards.includes(s.id)) { save.cards.push(s.id); save.coins += s.coins; run.cards.push(s.id); addXP(30); persist(); coinsUI(); play('zone'); note(T('found', T('s_' + s.id), s.coins), 'card', 3.2); } } }
   if (cur !== run.cur) { run.cur = cur; if (cur) { run.vis.push(cur); if (run.vis.length > 60) run.vis.shift(); } } // the order places were entered, for delivery missions
   run.mt -= dt; if (run.mt <= 0) { run.mt = 0.3; checkMissions(); }
   if (run.race) { // race: clock, ghost recording, next checkpoint. Fuel does not run down.
@@ -971,7 +1002,7 @@ function render(dt) {
       c.setTransform(u, 0, 0, u, ax, ay); c.rotate(a); c.fillStyle = '#1f7a74'; c.strokeStyle = '#fffaf0'; c.lineWidth = 3; c.lineJoin = 'round'; c.beginPath(); c.moveTo(24, 0); c.lineTo(-12, -16); c.lineTo(-4, 0); c.lineTo(-12, 16); c.closePath(); c.fill(); c.stroke();
       c.setTransform(u, 0, 0, u, ax - Math.cos(a) * 34, ay - Math.sin(a) * 34); c.font = '800 15px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 4; c.strokeStyle = INK; c.strokeText(nf(d / 8), 0, 0); c.fillStyle = '#fffaf0'; c.fillText(nf(d / 8), 0, 0); c.textBaseline = 'alphabetic'; }
   }
-  if (joy.id >= 0 && st === 'play') { // the drag ring under the finger
+  if (joy.on && st === 'play') { // the drag ring under the finger
     c.setTransform(dpr, 0, 0, dpr, 0, 0); const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = Math.hypot(dx, dy) || 1, k = Math.min(1, JOY_R / m);
     c.strokeStyle = 'rgba(255,250,240,.7)'; c.lineWidth = 3; c.beginPath(); c.arc(joy.ox, joy.oy, JOY_R, 0, TAU); c.stroke();
     c.fillStyle = 'rgba(200,32,43,.8)'; c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.arc(joy.ox + dx * k, joy.oy + dy * k, 20, 0, TAU); c.fill(); c.stroke();
@@ -998,7 +1029,8 @@ function hud() { // only touch the page when a value changes
   const m = Math.round(run.dist / 8), f = Math.round(run.fuel / run.max * 100), key = m + '|' + f + '|' + run.dates; if (key === hudKey) return; hudKey = key;
   $('mDist').textContent = nf(m); $('mDates').textContent = nf(run.dates);
   $('fuelFill').style.transform = `scaleX(${f / 100})`; $('bar').classList.toggle('danger', f < 20);
-  const ms = save.missions.find(q => !q.done), el = $('mis'); // the mission you are working on, with its progress
+  let ms = null, lead = -1; for (const q of save.missions) if (!q.done) { const k = mProg(q) / q.n; if (k > lead) { lead = k; ms = q; } } // the mission you are closest to finishing, with its progress
+  const el = $('mis');
   if (ms) { const tx = mText(ms) + ' · ' + mVal(ms, Math.min(ms.n, mProg(ms))) + ' / ' + mVal(ms, ms.n); if (el.textContent !== tx) el.textContent = tx; } el.hidden = !ms;
 }
 // ---------- the loop ----------
@@ -1034,25 +1066,26 @@ function showMenu() {
 function startRun(rc) { // rc: a race to drive, or nothing for a free safari
   unlockAudio(); st = 'play'; resetCar(); for (const o of DATES) o.off = false; for (const o of CANS) o.off = false;
   const u = save.up; Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine), grip: GRIP + 0.45 * u.tyres, rr: RR - 2.5 * u.tyres, tip: TIP + 0.022 * u.balance, pick: (41 + 13 * u.magnet) ** 2 });
-  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
+  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
   $('distLbl').textContent = rc ? '' : T('m'); $('dateLbl').textContent = rc ? T('cp') : T('dates'); show('fuelBox', !rc);
   const mi = $('mis'); mi.hidden = !rc; if (rc) mi.textContent = T('raceHud', T('r_' + rc.id), fmtTime(raceTargets(rc)[2]));
-  camx = car.x; camy = car.y; hudKey = ''; joy.id = -1; btnHb = false; $('driftBtn').classList.remove('on'); for (const k in keys) keys[k] = 0;
+  camx = car.x; camy = car.y; hudKey = ''; joy.on = false; btnHb = false; $('driftBtn').classList.remove('on'); for (const k in keys) keys[k] = 0;
   ['menu', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); ['hud', 'miniBtn', 'pauseBtn', 'mute', 'driftBtn'].forEach(id => show(id, true));
+  for (const a of ANIMALS) a.seen = 0;
   save.runs++; persist(); drawMap($('mini')); wake();
 }
-function pause() { if (st !== 'play') return; st = 'pause'; joy.id = -1; show('pausePop', true); releaseWake(); }
-function resume() { if (st !== 'pause') return; st = 'play'; show('pausePop', false); show('sheet', false); last = performance.now(); wake(); }
+function pause() { if (st !== 'play') return; st = 'pause'; joy.on = false; show('pausePop', true); releaseWake(); }
+function resume() { if (st !== 'pause') return; unlockAudio(); st = 'play'; show('pausePop', false); show('sheet', false); last = performance.now(); wake(); }
 async function endRun(early) {
   if (st !== 'play' && st !== 'pause') return;
   const dn = run.done, raced = !!run.race;
-  st = 'over'; joy.id = -1; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'driftBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
+  st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'driftBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
   const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
   run.newBest = !raced && m > save.best; if (run.newBest) save.best = m; save.coins += total;
   endDrift(); endTwo(); checkMissions(); addXP(m / 40 + run.dates / 2 + run.stunt / 25);
-  for (const q of save.missions) if (!q.done && (q.t === 'tdates' || q.t === 'tdist')) q.p = Math.min(q.n, mProg(q)); // missions that add up over several runs keep their progress
+  for (const q of save.missions) if (!q.done && MK[q.t][0] === 't') q.p = Math.min(q.n, mProg(q)); // missions that add up over several runs keep their progress
   run.live = false; fillMissions(); persist();
   // ads hook, the same one the other Abood games offer: the results card waits for it, for 15 seconds at most
   try { if (typeof window.aboodAfterRun === 'function') await Promise.race([window.aboodAfterRun({ distance: m, dates: run.dates }), new Promise(r => setTimeout(r, 15000))]); } catch (e) {}
@@ -1115,8 +1148,12 @@ function openSheet(id) {
   } else if (id === 'missions') {
     const top = el('div', 'rank'), bar = el('div', 'pbar'), fill = el('i'); fill.style.width = Math.round(save.xp / xpNeed(save.lvl) * 100) + '%'; bar.append(fill);
     top.append(el('b', '', T('rank')[rankOf(save.lvl)]), el('span', '', T('lv', save.lvl)), bar, el('small', '', nf(save.xp) + ' / ' + nf(xpNeed(save.lvl)))); body.append(top);
-    for (const m of save.missions) { const row = el('div', 'mrow' + (m.done ? ' done' : '')), v = Math.min(m.n, mProg(m)), pb = el('div', 'pbar'), pf = el('i'); pf.style.width = Math.round(v / m.n * 100) + '%'; pb.append(pf);
-      const rw = el('span', 'rw'); rw.append(el('i', 'coin'), el('b', '', '+' + m.rw)); row.append(el('b', '', mText(m)), rw, pb, el('small', '', m.done ? T('mDoneShort') : mVal(m, v) + ' / ' + mVal(m, m.n))); body.append(row); }
+    for (const m of save.missions) { const row = el('div', 'mrow' + (m.done ? ' done' : '')), v = Math.min(m.n, mProg(m)), pb = el('div', 'pbar'), pf = el('i'), ttl = el('b'); pf.style.width = Math.round(v / m.n * 100) + '%'; pb.append(pf);
+      ttl.append(el('span', 'stars', '★'.repeat(m.d || 2)), ' ' + mText(m));
+      const rw = el('span', 'rw'); rw.append(el('i', 'coin'), el('b', '', '+' + m.rw)); row.append(ttl, rw, pb, el('small', '', m.done ? T('mDoneShort') : mVal(m, v) + ' / ' + mVal(m, m.n)));
+      if (!m.done && !run.live) { const sb = el('button', 'mswap', T('swap', swapCost())); sb.type = 'button'; // a mission you do not fancy can be swapped for a few dirhams
+        sb.onclick = () => { const cost = swapCost(); if (save.coins < cost) return note(T('notEnough')); save.coins -= cost; save.missions.splice(save.missions.indexOf(m), 1); fillMissions(); persist(); coinsUI(); play('power'); openSheet('missions'); }; row.append(sb); }
+      body.append(row); }
     body.append(el('p', 'hint', T('misNote', save.streak)));
   } else if (id === 'races') {
     body.append(el('p', 'label', T('raceNote')));
@@ -1124,7 +1161,9 @@ function openSheet(id) {
       const info = el('div', 'rinfo'), tm = el('div', 'rtimes'); info.append(el('b', '', T('r_' + rc.id)), el('small', '', rc.pts.map(id => T('s_' + id)).join(getLang() === 'ar' ? ' ← ' : ' → ')));
       tg.forEach((sec, i) => { const sp = el('span', 'md m' + (i + 1) + (med > i ? ' on' : '')); sp.append(el('i'), el('span', '', fmtTime(sec))); tm.append(sp); }); if (best) tm.append(el('span', 'best', T('bestTime', fmtTime(best)))); info.append(tm);
       const btn = el('button', 'btn', locked ? T('locked', rc.lvl) : T('raceGo')); btn.type = 'button'; btn.disabled = locked; btn.onclick = () => startRun(rc); row.append(info, btn); body.append(row); }
-  } else { const ol = el('ol', 'help-list'); for (const line of T('help')) ol.append(el('li', '', line)); body.append(ol); }
+  } else { const ol = el('ol', 'help-list'); for (const line of T('help')) ol.append(el('li', '', line));
+    // one line for support: the version, where it is running, and what the screen has reported (touches started / moved / cancelled, pointers down / cancelled, focus lost)
+    body.append(ol, el('p', 'diag', `${BUILD.startsWith('__') ? 'dev' : BUILD} · ${IOS ? 'iOS' : 'web'}${APP ? ' app' : ''} · touch ${diag.ts}/${diag.tm}/${diag.tc} · pointer ${diag.pd}/${diag.pc} · blur ${diag.bl}`)); }
   show('sheet', true);
 }
 function closeSheet() { show('sheet', false); sheetId = null; if (st === 'pause' && $('pausePop').hidden) resume(); }
@@ -1142,27 +1181,44 @@ addEventListener('keydown', e => {
   if (e.code === 'Enter' && $('sheet').hidden && $('langPick').hidden) { if (st === 'menu') startRun(); else if (st === 'over') startRun(run.race); else if (st === 'pause') resume(); }
 });
 addEventListener('keyup', e => { keys[e.code] = 0; });
-cv.addEventListener('pointerdown', e => { if (st !== 'play') return; unlockAudio(); joy.id = e.pointerId; joy.ox = joy.x = e.clientX; joy.oy = joy.y = e.clientY; try { cv.setPointerCapture(e.pointerId); } catch (err) {} }); // the newest finger takes over, so steering can never get stuck on a lost one
-cv.addEventListener('pointermove', e => { if (e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
-const joyEnd = e => { if (e.pointerId === joy.id) joy.id = -1; };
-for (const ev of ['pointerup', 'pointercancel']) { cv.addEventListener(ev, joyEnd); addEventListener(ev, joyEnd); }
-addEventListener('blur', () => { joy.id = -1; btnHb = false; for (const k in keys) keys[k] = 0; });
+// Steering: put a finger down and drag. Fingers are read from touch events where the browser has them, and each one is answered
+// with preventDefault, so the browser's own gestures (scroll, zoom, the text loupe, drag and drop) can never take the finger away.
+// That matters most on iPad and iPhone, above all in the home-screen app. A mouse or a pen comes through pointer events.
+const TOUCH = 'ontouchstart' in window, own = e => { if (e.cancelable) e.preventDefault(); }, diag = { ts: 0, tm: 0, tc: 0, pd: 0, pc: 0, bl: 0 }; // counts of what the screen has reported, shown at the foot of How to play
+const joyStart = (src, id, x, y) => { if (st !== 'play') return; joy.on = true; joy.src = src; joy.id = id; joy.ox = joy.x = x; joy.oy = joy.y = y; }; // the newest finger takes over, so steering can never get stuck on a lost one
+const joyMove = (src, id, x, y) => { if (!joy.on) joyStart(src, id, x, y); else if (joy.src === src && joy.id === id) { joy.x = x; joy.y = y; } }; // a finger that is still moving after the steering was dropped picks it up again
+const joyEnd = (src, id) => { if (joy.on && joy.src === src && joy.id === id) joy.on = false; };
+if (TOUCH) {
+  cv.addEventListener('touchstart', e => { own(e); diag.ts++; const t = e.changedTouches[e.changedTouches.length - 1]; joyStart('t', t.identifier, t.clientX, t.clientY); }, { passive: false });
+  cv.addEventListener('touchmove', e => { own(e); diag.tm++; for (const t of e.changedTouches) joyMove('t', t.identifier, t.clientX, t.clientY); }, { passive: false });
+  cv.addEventListener('touchend', e => { own(e); if (st === 'play') unlockAudio(); for (const t of e.changedTouches) joyEnd('t', t.identifier); }, { passive: false });
+  cv.addEventListener('touchcancel', e => { diag.tc++; for (const t of e.changedTouches) joyEnd('t', t.identifier); });
+}
+const viaTouch = e => TOUCH && e.pointerType === 'touch'; // that finger is already handled above
+cv.addEventListener('pointerdown', e => { diag.pd++; if (st !== 'play') return; unlockAudio(); if (viaTouch(e)) return; joyStart('p', e.pointerId, e.clientX, e.clientY); try { cv.setPointerCapture(e.pointerId); } catch (err) {} });
+cv.addEventListener('pointermove', e => { if (joy.on && joy.src === 'p' && e.pointerId === joy.id) { joy.x = e.clientX; joy.y = e.clientY; } });
+const pointerEnd = e => joyEnd('p', e.pointerId);
+for (const ev of ['pointerup', 'pointercancel']) { cv.addEventListener(ev, pointerEnd); addEventListener(ev, pointerEnd); }
+addEventListener('pointercancel', () => { diag.pc++; });
+addEventListener('blur', () => { diag.bl++; joy.on = false; btnHb = false; for (const k in keys) keys[k] = 0; });
 // the Drift button: hold it to slide, and in the air to flip or spin
 const db = $('driftBtn'), dbSet = on => e => { e.preventDefault(); btnHb = on; db.classList.toggle('on', on); if (on) { unlockAudio(); try { db.setPointerCapture(e.pointerId); } catch (err) {} } };
 db.addEventListener('pointerdown', dbSet(true)); for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) db.addEventListener(ev, dbSet(false));
 db.addEventListener('contextmenu', e => e.preventDefault());
+if (TOUCH) db.addEventListener('touchstart', own, { passive: false }); // a held finger must stay a held button, not a long-press menu
 cv.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 $('startBtn').onclick = () => startRun(); $('againBtn').onclick = () => startRun(run.race); $('overMenuBtn').onclick = showMenu;
 $('pauseBtn').onclick = pause; $('resumeBtn').onclick = resume; $('pauseMenuBtn').onclick = () => endRun(true);
 $('mute').onclick = toggleMute; $('menuMute').onclick = toggleMute; $('sheetClose').onclick = closeSheet;
-$('miniBtn').onclick = () => { if (st === 'play') { st = 'pause'; joy.id = -1; releaseWake(); openSheet('map'); } };
+$('miniBtn').onclick = () => { if (st === 'play') { st = 'pause'; joy.on = false; releaseWake(); openSheet('map'); } };
 document.querySelectorAll('[data-sheet]').forEach(b => { b.onclick = () => { unlockAudio(); openSheet(b.dataset.sheet); }; });
 document.addEventListener('click', e => { const b = e.target.closest('[data-lang]'); if (b) setLang(b.dataset.lang); const p = e.target.closest('[data-pick]'); if (p) { setLang(p.dataset.pick); show('langPick', false); unlockAudio(); } });
 const fsEl = document.documentElement;
-if (fsEl.requestFullscreen && !/iPhone|iPad/.test(navigator.userAgent)) { show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
+if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
+  show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, get hb() { return btnHb; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, newMission, fillMissions, mProg, mText, slots, get hb() { return btnHb; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
@@ -1184,7 +1240,7 @@ new ResizeObserver(resize).observe(cv); // after layout, before paint: the pictu
   fillMissions(); showMenu(); $('loader').classList.add('done');
   if (save.day !== today) { const y = new Date(); y.setDate(y.getDate() - 1); save.streak = save.day === dayKey(y) ? save.streak + 1 : 1; save.day = today; const c = 15 * Math.min(7, save.streak); save.coins += c; persist(); coinsUI(); note(T('daily', save.streak, c), 'card', 4.5); } setTimeout(() => { $('loader').hidden = true; }, 500);
   if (!hasStoredLang()) show('langPick', true);
-  if (/iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone) show('iosHint', true);
+  if (IOS && !APP) show('iosHint', true);
   // offline cache, and a note when a new version has been installed
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     const had = !!navigator.serviceWorker.controller; navigator.serviceWorker.register('./sw.js').catch(() => {});
