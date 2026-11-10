@@ -93,7 +93,7 @@ python3 -m http.server 8000
 
 ## Publish on GitHub Pages
 
-Every push to `main` runs `.github/workflows/pages.yml`, which stamps the commit id into `__BUILD__` (cache name and asset URLs) and publishes to the `gh-pages` branch. If the site does not appear after the first deploy, open **Settings → Pages** and set **Source** to **Deploy from a branch**, branch **gh-pages**, folder **/ (root)**. The game is then at `https://<user>.github.io/Abood-Liwa/`.
+Every push to `main` runs `.github/workflows/pages.yml`, which stamps the commit id into `__BUILD__` (cache name and asset URLs) and publishes to the `gh-pages` branch. If the site does not appear after the first deploy, open **Settings → Pages** and set **Source** to **Deploy from a branch**, branch **gh-pages**, folder **/ (root)**. The game is then at `https://mja-py.github.io/abood-liwa/`.
 
 ## Project layout
 
