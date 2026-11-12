@@ -6,9 +6,9 @@ A free-roam dune safari for the browser, and a sister game to *Run, Abood!* and 
 
 ## How to play
 
-- **Touch:** put a finger anywhere and drag the way you want to go. Drag further to go faster.
+- **Touch:** put a finger anywhere and drag the way you want to go. Two rings appear under it: inside the first, the further you drag the faster you go; out past the second is *pressing hard*, which slides the car and does tricks in the air (see Stunts). There are no buttons to find.
 - **Keyboard:** arrow keys or WASD. Up accelerates, down brakes and reverses, left and right steer. P or Esc pauses.
-- **Dunes** have a gentle windward side and a steep slip face. Build speed up the gentle side and the car takes off at the crest.
+- **Dunes** are real ones in cross-section: a long gentle windward ramp that is still climbing at the crest, a sharp crest that catches the light, and a short dark slip face. They all face downwind. Build speed up the ramp and the car flies off the crest; coming the other way, the car drops into low gear and crawls up the slip face, so a run-up or a climb at an angle is quicker. Only Tal Moreeb is too steep to crawl up; stall there and Baba says so.
 - **Rolling:** driving across a steep slope, or landing sideways, rolls the car. It tumbles downhill, costs fuel, and Baba has something to say.
 - **Dates** turn into dirhams at the end of the run. A **red jerrycan** tops up the fuel.
 - **The run ends** when the fuel runs out.
@@ -37,9 +37,9 @@ Camels and oryx wander near home and trot away from a fast car.
 
 Every stunt scores points, shown above the car. Fifty points are worth one dirham at the end of the run, and there are missions for each kind.
 
-- **Drift:** at speed, hold the red Drift button while you turn (keyboard: hold Space while steering). Steering alone never starts a stunt. Grip drops, the car slides sideways under power and throws sand. Points grow with speed and angle. A full circle is a donut.
+- **Drift:** at speed, press hard (drag past the second ring) into a sharp turn; keyboard: hold Space while steering. Pressing hard straight ahead is just driving, and a sharp turn inside the first ring grips, so a slide is always a choice. The back steps out with a kick, the car holds an angle of about fifty degrees with the nose ahead of the way it is going, throws sand sideways, ploughs darker marks, and keeps about three quarters of its speed. It ends when the car points where your finger is, and a good one ends with a shove forward. A short hop over a crest does not break it. Points grow with speed and angle. A full circle is a donut.
 - **Two wheels:** a fast turn, or driving across a slope, lifts one side of the car. Hold it there for points. On level sand the car cannot go over from turning alone; on a slope it can. A drift sheds the tipping force, so sliding is the safe way round a fast corner.
-- **Spins and flips:** in the air, press the Drift button for a backflip, or hold it and drag across the jump for a 360 spin (keyboard: Space with left or right, Space with down, F for a front flip). Each trick is one full turn, paced to finish before landing, and only starts when the jump is long enough. Land on the wheels to bank it.
+- **Spins and flips:** in the air, press hard backwards for a backflip, or hard across the jump for a 360 spin; pressing hard forwards does nothing, so holding the throttle open over a crest is safe (keyboard: Space with left or right, Space with down, F for a front flip). Each trick is one full turn, paced to finish before landing, and only starts when the jump is long enough. Land on the wheels to bank it.
 - **Combo:** land a stunt within about three seconds of the last one and it scores double, then triple, up to five times. The clock waits while a stunt is under way, a ×2 badge under the car shows what the next stunt is worth and how long is left, and rolling the car sends it back to the start. Points already scored are never taken back.
 
 ## Missions, levels and races
@@ -69,7 +69,7 @@ In-game dirhams only; there are no real payments. Progress is saved on the devic
 
 A small canvas game with no image files. Everything on screen is drawn in code.
 
-- **One height function.** `H(x, y)` in `js/game.js` gives the ground height anywhere: two sets of wind-shaped ridges, some noise, one big bump for Tal Moreeb, flat ground round each place, and a raised rim. The picture and the physics both read it, so what looks steep is steep.
+- **One height function.** `H(x, y)` in `js/game.js` gives the ground height anywhere: a field of dunes from `dune()` (windward ramp, sharp crest, slip face), 560 px apart and up to 95 high, taller in some parts of the reserve than others; a set of small cross ripples; some noise; one big bump for Tal Moreeb; flat ground round each place; and a raised rim. The picture and the physics both read it, so what looks steep is steep.
 - **Ground:** the sand is shaded from the slope of `H` into 256 px tiles, baked the first time they are needed and kept in a cache of 150. After that a frame copies about 15 images.
 - **Driving:** the engine pushes along the car's heading, the slope pulls it downhill, the tyres only half hold sideways. When the ground falls away faster than gravity the car is in the air. Constants are at the top of the *state* section.
 - **Sprites:** Abood, Baba, the car, animals and landmarks are drawn once with canvas paths into cached sprites.

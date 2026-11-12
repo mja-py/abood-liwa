@@ -49,16 +49,21 @@ function vn(x, y) { // smooth value noise
 // one dune ridge: a long gentle windward side (share a) and a short steep slip face
 function ridge(u, a) { const s = u - Math.floor(u); return s < a ? 0.5 - 0.5 * Math.cos(Math.PI * s / a) : 0.5 + 0.5 * Math.cos(Math.PI * (s - a) / (1 - a)); }
 // ground height at any point. The drawing and the driving both read this one function.
+// one real dune in cross-section, u running downwind: a long windward ramp that is still climbing when it reaches the crest, so the
+// crest is a lip to fly off, then the slip face, steepest at the top and easing out into the trough. a is the windward share.
+function dune(u, a) { const s = u - Math.floor(u); if (s < a) { const t = s / a; return t * t * (2 - t); } return Math.pow(1 - (s - a) / (1 - a), 1.45); }
 function H(x, y) {
   const w = vn(x * 0.0011 + 7.3, y * 0.0011 - 2.1) - 0.5;
-  const amp = 0.3 + 0.7 * sstep(0.28, 0.66, vn(x * 0.0006 - 4.2, y * 0.0006 + 9.7));
-  let h = ridge((x * WX + y * WY) / 560 + w * 1.7, 0.72) * 64 * amp
+  const amp = 0.45 + 0.55 * sstep(0.28, 0.66, vn(x * 0.0006 - 4.2, y * 0.0006 + 9.7)); // low dunes in some parts of the reserve, tall ones in others
+  let h = dune((x * WX + y * WY) / 560 + w * 0.7, 0.68) * 95 * amp // the bend in the crest lines is kept gentle enough that every slip face looks downwind
     + ridge((x * 0.5 - y * 0.866) / 250 + w * 0.9 + 3.1, 0.66) * 12 * (0.4 + amp * 0.6)
     + vn(x * 0.0024 + 1.7, y * 0.0024 + 5.1) * 12;
   for (const s of SITES) {
     const dx = x - s.x, dy = y - s.y, d2 = dx * dx + dy * dy;
-    if (s.hill) { if (d2 < 1.6e6) h += s.hill * Math.exp(-d2 / 217800); } // Tal Moreeb: one big dune
-    else if (d2 < s.f2 * 6) { const f = Math.exp(-d2 / s.f2); h = h * (1 - f) + 5 * f; } // level ground around a landmark
+    // Each bump is lowered by its own value at the edge where it is cut off (e^-7.346 and e^-6), so it meets the dunes with no step.
+    // A step there was only a fraction of a pixel high, but the crest shading picks it up and draws it as a dashed ring on the sand.
+    if (s.hill) { if (d2 < 1.6e6) h += s.hill * (Math.exp(-d2 / 217800) - 6.45e-4); } // Tal Moreeb: one big dune
+    else if (d2 < s.f2 * 6) { const f = Math.exp(-d2 / s.f2) - 2.48e-3; h = h * (1 - f) + 5 * f; } // level ground around a landmark
   }
   const d = Math.hypot(x, y); if (d > R - 150) { const e = (d - (R - 150)) / 150; h += e * e * 45; } // the rim rises
   return h;
@@ -72,9 +77,9 @@ function sand(k, out, o) { // k 0..1 = shadow..lit
   if (k < 0.5) { const f = k * 2; out[o] = 168 + 61 * f; out[o + 1] = 98 + 74 * f; out[o + 2] = 58 + 46 * f; }
   else { const f = (k - 0.5) * 2; out[o] = 229 + 23 * f; out[o + 1] = 172 + 56 * f; out[o + 2] = 104 + 66 * f; }
 }
-function shadeAt(dx, dy, c, wx, wy) {
+function shadeAt(dx, dy, c, wx, wy, curv = 0) { // curv: how sharply the ground bends here; a crest catches the light, a trough sits a little darker
   const sh = (-dx * LX - dy * LY + LZ) / Math.sqrt(dx * dx + dy * dy + 1);
-  let k = (sh - LZ) * 1.25 + 0.5 + (c - 30) * 0.0013 + Math.sin((wx * WX + wy * WY) * 0.42 + vn(wx * 0.01, wy * 0.01) * 5) * 0.02;
+  let k = (sh - LZ) * 1.25 + 0.5 + (c - 30) * 0.0013 + Math.sin((wx * WX + wy * WY) * 0.42 + vn(wx * 0.01, wy * 0.01) * 5) * 0.02 + clamp(-curv * 0.13, -0.07, 0.24);
   k = clamp(k, 0, 1); return k * 0.55 + Math.round(k * 6) / 6 * 0.45; // half smooth, half banded: a drawn look
 }
 const SAB = site('sabkha');
@@ -83,7 +88,7 @@ function bakeTile(ix, iy) {
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) HG[j * N + i] = H(ix * TS + (i - 0.5) * st, iy * TS + (j - 0.5) * st);
   for (let j = 0; j < TP; j++) for (let i = 0; i < TP; i++) {
     const p = (j + 1) * N + i + 1, o = (j * TP + i) * 4, wx = ix * TS + (i + 0.5) * st, wy = iy * TS + (j + 0.5) * st;
-    const k = shadeAt((HG[p + 1] - HG[p - 1]) / (2 * st), (HG[p + N] - HG[p - N]) / (2 * st), HG[p], wx, wy);
+    const k = shadeAt((HG[p + 1] - HG[p - 1]) / (2 * st), (HG[p + N] - HG[p - N]) / (2 * st), HG[p], wx, wy, HG[p + 1] + HG[p - 1] + HG[p + N] + HG[p - N] - 4 * HG[p]);
     sand(k, px, o);
     const ds = Math.hypot(wx - SAB.x, wy - SAB.y);
     if (ds < SAB.r) { const f = sstep(SAB.r, SAB.r * 0.72, ds) * 0.85, v = 0.9 + 0.1 * k; px[o] += (236 * v - px[o]) * f; px[o + 1] += (226 * v - px[o + 1]) * f; px[o + 2] += (206 * v - px[o + 2]) * f; }
@@ -626,14 +631,14 @@ const PROPS = [], DATES = [], CANS = [], ANIMALS = [];
 let st = 'load', t = 0, W = 0, Hh = 0, zoom = 1, dpr = 1, rs = 1, camx = 0, camy = 0, shake = 0, noteT = 0, slow = 0, hudKey = '', miniTick = 0, edgeT = 0, hitT = 0;
 const car = {}, run = { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], fuel: 100, max: 100, over: 0, low: false, seen: {}, vis: [], live: false };
 const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700 }; // what the upgrades change, set at the start of a run
-const parts = [], floats = [], tracks = [[], []], keys = {}, joy = { on: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 };
-let btnHb = false; // the on-screen Drift button is held
+const parts = [], floats = [], tracks = [[], [], [], []], keys = {}, joy = { on: false, hard: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 }; // tracks: two tyre marks, and two darker ones laid down while sliding
+let stallT = 0, hintT = 0; // stuck on a steep face with the engine pulling, and how long until the next hint about it
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // base values; see PH
-   TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, TIP = 0.4;
+   TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, HARD_R = 96, TIP = 0.4; // the pad: full throttle at JOY_R from where the finger went down; past HARD_R is pressing hard
 function resetCar() {
   Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0, pit: 0, rol: 0, spin: 0, rside: 1,
-    drift: false, dsc: 0, dyaw: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0 });
-  tracks[0].length = tracks[1].length = 0; parts.length = floats.length = 0;
+    drift: false, dsc: 0, dyaw: 0, dT: 0, dsn: 0, dl: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0 });
+  for (const a of tracks) a.length = 0; parts.length = floats.length = 0; stallT = 0;
 }
 const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
 function resize() {
@@ -675,9 +680,9 @@ const MK = {
 };
 const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1, two: 1, twohold: 1 }; // how often each category is dealt; the kinds counted in tenths
 const slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
-function newMission() {
+function newMission(avoid) { // avoid: the kind being swapped away, which must not come straight back
   const L = save.lvl, act = save.missions, catN = c => act.filter(m => MK[m.t][0] === c).length;
-  let pool = Object.keys(MK).filter(k => MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
+  let pool = Object.keys(MK).filter(k => k !== avoid && MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
   const fresh = pool.filter(k => !save.mrec.includes(k)); if (fresh.length >= 4) pool = fresh;                                         // not one you had a moment ago
   const cats = [...new Set(pool.map(k => MK[k][0]))], low = Math.min(...cats.map(catN)), want = cats.filter(c => catN(c) === low);      // spread across the categories
   let roll = Math.random() * want.reduce((sum, c) => sum + CAT_W[c], 0), cat = want[0]; for (const c of want) { roll -= CAT_W[c]; if (roll < 0) { cat = c; break; } }
@@ -693,7 +698,7 @@ function newMission() {
   m.rw = Math.max(5, Math.round((25 + L * 5) * w * [0.75, 1, 1.5][d - 1] / 5) * 5); m.xp = Math.round(40 * w * [0.8, 1, 1.4][d - 1]);
   save.mrec.push(t); if (save.mrec.length > 8) save.mrec.shift(); return m;
 }
-function fillMissions() { save.missions = save.missions.filter(m => !m.done && MK[m.t]); while (save.missions.length < slots()) save.missions.push(newMission()); }
+function fillMissions(avoid) { save.missions = save.missions.filter(m => !m.done && MK[m.t]); while (save.missions.length < slots()) save.missions.push(newMission(avoid)); }
 function mProg(m) { // how far a mission has got, counting the run in progress
   const on = run.live; if (MK[m.t][0] !== 't' && (!on || (m.nr && run.rolls))) return 0; // after a roll, a no-roll mission starts again on the next run
   switch (m.t) {
@@ -751,7 +756,7 @@ function dailyRace() {
 }
 const raceKey = rc => rc.key || rc.id, reach = s => s.hill ? 130 : s.r + 50;
 function raceLen(rc) { let L = 0; for (let i = 1; i < rc.pts.length; i++) { const a = site(rc.pts[i - 1]), b = site(rc.pts[i]); L += Math.hypot(a.x - b.x, a.y - b.y); } return L; }
-const raceTargets = rc => { const L = raceLen(rc), k = 3 + rc.pts.length; return [L / 125 + k, L / 165 + k, L / 205 + k]; }; // bronze, silver, gold, in seconds: a pace, plus time to get going and to turn at each place
+const raceTargets = rc => { const L = raceLen(rc), k = 3 + rc.pts.length; return [L / 118 + k, L / 155 + k, L / 192 + k]; }; // bronze, silver, gold, in seconds: a pace, plus time to get going and to turn at each place
 const GH_KEY = 'abood-liwa-ghost'; let ghosts = {};
 try { ghosts = JSON.parse(localStorage.getItem(GH_KEY) || '{}') || {}; } catch (e) {}
 function finishRace() {
@@ -775,7 +780,13 @@ function stunt(pts, label) {
   if (counts) { run.chain = Math.min(CH_MAX, run.chain + 1); run.chainT = CH_WIN; if (m > run.combo) run.combo = m; }
   run.stunt += total; float(car.x, car.y - 125, label + ' +' + total + (m > 1 ? ' ×' + m : ''), m > 1 ? '#ffb84a' : '#ffe07a'); play('date', 0.75 + (m - 1) * 0.09, 1.2); if (m > 1) buzz(15);
 }
-function endDrift() { if (!car.drift) return; car.drift = false; if (car.dsc > 20) { run.drift += car.dsc; if (car.dsc > run.maxDrift) run.maxDrift = car.dsc; stunt(car.dsc, T('st_drift')); } car.dsc = 0; }
+function endDrift(clean) { // clean: the slide was driven out of, not ended by a jump or a roll
+  if (!car.drift) return; car.drift = false;
+  if (car.dsc > 20) { run.drift += car.dsc; if (car.dsc > run.maxDrift) run.maxDrift = car.dsc; stunt(car.dsc, T('st_drift'));
+    if (clean && car.dsc > 45) { const b = Math.min(130, 35 + car.dsc * 0.3), cs = Math.cos(car.ang), sn = Math.sin(car.ang); // a good slide ends with a shove forward: the reason to drift, beyond the points
+      car.vx += cs * b; car.vy += sn * b; play('power', 1.5, 0.45); buzz(20); puff(car.x - cs * 40, car.y - sn * 40, -cs * 160, -sn * 160, 10, true); float(car.x, car.y - 100, T('st_boost'), '#bff0c0'); } }
+  car.dsc = 0;
+}
 function endTwo() { if (car.twoT > run.maxTwo) run.maxTwo = car.twoT; if (car.twoT > 0.4) stunt(car.twoT * 70, T('st_two', car.twoT.toFixed(1))); car.twoT = 0; }
 function startRoll(dx, dy) { // the car goes over and tumbles in the direction (dx, dy)
   endDrift(); car.twoT = 0;
@@ -791,11 +802,14 @@ function update(dt) {
     camx = car.x; camy = car.y; engine(0, 0.3); return;
   }
   let thr = 0, steer = 0, hb = false, spinIn = 0, flipIn = 0; // hb: handbrake, which starts a drift
-  if (joy.on || btnHb) { // touch: drag the way you want to go. Stunts only happen while the Drift button is held, so steering alone never starts one.
-    const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = joy.on ? Math.hypot(dx, dy) : 0; hb = btnHb;
+  if (joy.on) { // the pad: drag the way you want to go, further to go faster. Past the outer ring is pressing hard: that slides the car, and in the air does tricks.
+    let dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = Math.hypot(dx, dy);
+    if (m > HARD_R * 1.3) { const k = HARD_R * 1.3 / m; joy.ox = joy.x - dx * k; joy.oy = joy.y - dy * k; dx *= k; dy *= k; m = HARD_R * 1.3; } // the pad follows a finger that has gone past its edge
+    joy.hard = m > HARD_R * (joy.hard ? 0.86 : 1);                                                                                     // a little slack, so the edge of the ring does not flicker
     if (m > 8) { const d = wrap(Math.atan2(dy, dx) - car.ang); steer = clamp(d * 2.4, -1, 1); thr = clamp(m / JOY_R, 0.25, 1) * (Math.abs(d) > 2 ? 0.55 : 1);
-      if (hb) { const c0 = Math.cos(car.a0), s0 = Math.sin(car.a0); if (Math.abs(dy * c0 - dx * s0) > 0.6 * m) spinIn = Math.sign(dy * c0 - dx * s0); } } // in the air: button and a drag across the jump is a spin
-    if (hb && !spinIn) flipIn = -1;                                                                                                                         // button alone in the air is a backflip
+      if (joy.hard) { hb = car.drift || Math.abs(d) > 0.5;                                                                             // pressed hard into a sharp turn: the back steps out. Hard and straight ahead is just driving.
+        const c0 = Math.cos(car.a0), s0 = Math.sin(car.a0), side = (dy * c0 - dx * s0) / m, fwd = (dx * c0 + dy * s0) / m;             // in the air, read against the way the jump is going:
+        if (Math.abs(side) > 0.7) spinIn = Math.sign(side); else if (fwd < -0.5) flipIn = -1; } }                                      // hard across it is a spin, hard back is a backflip
   } else { thr = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0); steer = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
     hb = !!(keys.Space || keys.ShiftLeft || keys.ShiftRight); if (hb) { spinIn = steer; flipIn = steer ? 0 : thr < 0 ? -1 : 0; } if (keys.KeyF) flipIn = 1; } // keyboard: hold Space for a drift; in the air Space with left or right spins, Space with down is a backflip, F a front flip
   if (run.fuel <= 0) thr = 0;
@@ -820,6 +834,7 @@ function update(dt) {
       const cs = Math.cos(car.ang), sn = Math.sin(car.ang), l = -car.vx * sn + car.vy * cs, sl = -gx * sn + gy * cs, gm = Math.hypot(gx, gy), upside = Math.abs(wrap(car.fp)) > 0.8;
       const flips = Math.round(car.fp / TAU), spins = Math.round(car.fy / Math.PI);
       car.air = false; car.z = h0; car.gvz = gx * car.vx + gy * car.vy; car.fp = car.fy = 0; car.trick = null;
+      if (car.drift && car.airT > 0.4) endDrift();
       if (car.airT > 0.32 || upside) {
         shake = Math.min(9, 3 + car.airT * 5); play('hit', 0.8, 0.6); puff(car.x, car.y, car.vx * 0.2, car.vy * 0.2, 8, true); buzz(30);
         if (upside || (car.safe <= 0 && ((Math.abs(l) > 0.5 * sp && sp > 150) || Math.abs(sl) > PH.tip + 0.04))) { if (gm > 0.08) startRoll(-gx, -gy); else startRoll(-sn * (l || 1), cs * (l || 1)); }
@@ -834,23 +849,33 @@ function update(dt) {
     }
   } else {
     let cs = Math.cos(car.ang), sn = Math.sin(car.ang);
-    const want = hb && sp > 150 && Math.abs(car.steer) > 0.3; if (want && !car.drift) { car.drift = true; car.dsc = 0; car.dyaw = 0; play('whoosh', 0.7, 0.5); }
-    const yr = car.steer * TURN * clamp((car.vx * cs + car.vy * sn) / 150, -1, 1) * (car.drift ? 1.5 : 1); // how fast the car is turning
+    const want = hb && sp > 150 && Math.abs(car.steer) > 0.3; if (want && !car.drift) { car.drift = true; car.dsc = 0; car.dyaw = 0; car.dT = 0; car.dsn = 0; play('whoosh', 0.7, 0.6); buzz(15); }
+    // A slide holds an angle rather than spinning the car round: it starts with a kick that throws the back out, then the further the car is
+    // already sideways the less it turns in, so the nose stays ahead of the way it is going by about fifty degrees and most of the speed carries.
+    const f0 = car.vx * cs + car.vy * sn, l0 = -car.vx * sn + car.vy * cs, slip = Math.atan2(Math.abs(l0), Math.abs(f0) + 1), deeper = car.steer * l0 < 0;
+    const dmul = car.drift ? (1.3 + 0.9 * Math.max(0, 1 - car.dT / 0.3)) * (deeper ? 1 - 0.82 * sstep(0.45, 0.95, slip) : 1.15) : 1;
+    const yr = car.steer * TURN * clamp(f0 / 150, -1, 1) * dmul; // how fast the car is turning
     car.ang += yr * dt; cs = Math.cos(car.ang); sn = Math.sin(car.ang);
     let f = car.vx * cs + car.vy * sn, l = -car.vx * sn + car.vy * cs; const sf = gx * cs + gy * sn, sl = -gx * sn + gy * cs; car.sf = sf;
-    const push = thr > 0 ? thr * PH.acc : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * 0.5) : 0;
+    // Low gear: at a crawl the engine pulls much harder, so the steepest slip face slows the car right down but never traps it. From rest it pulls
+    // 2.4 × 350 = 840 against 700 per unit of slope plus the sand's 26, so it climbs a slope of 1.16; the steepest slip face outside Tal Moreeb is 1.10.
+    const low = 1 + 1.4 * clamp(1 - Math.abs(f) / 170, 0, 1) * sstep(0.1, 0.4, sf); // only when pointing uphill: on the level the car pulls away as it always has
+    const push = thr > 0 ? thr * PH.acc * low : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * 0.5) : 0;
     f += (push - GR * sf - DRAG * f) * dt; f -= clamp(f, -PH.rr * dt, PH.rr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
-    l += -GR * sl * dt; l *= Math.exp(-(car.drift ? 0.85 : PH.grip) * dt);                              // the slope pulls sideways; the tyres only half hold in sand
+    l += -GR * sl * dt; l *= Math.exp(-(car.drift ? (want ? 1.05 + 3 * Math.max(0, slip - 0.85) : 3) : PH.grip) * dt); // the slope pulls sideways; the tyres only half hold in sand, hardly at all in a slide, and bite again once it is let go
     car.vx = cs * f - sn * l; car.vy = sn * f + cs * l; sp = Math.hypot(car.vx, car.vy);
     const gvz = gx * car.vx + gy * car.vy;
     if ((car.gvz - gvz) / dt > GRAV * 0.75 && sp > 120) { car.air = true; car.vz = car.gvz; car.airT = 0; car.z = h0; play('whoosh', 1, 0.7); } // the ground drops away faster than gravity: take off
     else car.z = h0;
     car.gvz = gvz;
-    if (car.air) { endDrift(); endTwo(); car.a0 = car.ang; car.trick = null; car.fp = car.fy = 0; if (car.vz > 0) car.vz *= 1.15; }
+    if (thr > 0.5 && sp < 35 && sf > 0.36) { stallT += dt; if (stallT > 0.9 && hintT <= 0) { hintT = 12; note(T('stall'), 'baba', 3.2); } } else stallT = 0; // stopped on a face too steep even for low gear (Tal Moreeb has them): Baba says how to get up it
+    if (car.air) { endTwo(); car.a0 = car.ang; // a slide is not ended by taking off: a short hop over a crest carries it through
+      car.trick = null; car.fp = car.fy = 0; if (car.vz > 0) car.vz *= 1.15; }
     if (car.drift) { // points for how sideways and how fast; a full circle is a donut
       car.dsc += Math.atan2(Math.abs(l), Math.abs(f) + 1) * sp * dt * 0.3; car.dyaw += yr * dt;
       if (Math.abs(car.dyaw) > TAU) { car.dyaw -= Math.sign(car.dyaw) * TAU; car.dsc += 120; run.donuts++; float(car.x, car.y - 150, T('st_donut'), '#ffe07a'); }
-      if (!want && Math.abs(l) < 30) endDrift();
+      car.dT += dt; if ((car.dsn -= dt) <= 0) { car.dsn = 0.2; play('whoosh', 0.5 + Math.random() * 0.18, 0.2); } // the hiss of sliding sand
+      if (!want && Math.abs(l) < 45) endDrift(true);
     }
     // what tips the car: the slope across it, and the pull of a fast turn (much less while it is sliding)
     const q = sl + f * yr / GR * (car.drift ? 0.15 : 0.62), ex = Math.abs(q) - PH.tip;
@@ -860,16 +885,17 @@ function update(dt) {
     else car.tip = Math.max(0, car.tip - dt * 1.3);
     if (car.tip > 0.3 && !car.roll && !car.air) { car.twoT += dt; run.two += dt; } else if (car.twoT > 0) endTwo(); // on two wheels
     if (!car.roll && !car.air) {
-      if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06) * (car.drift ? 4 : 1)) puff(car.x - cs * 38 + (Math.random() - 0.5) * 50 * sn, car.y - sn * 38 - (Math.random() - 0.5) * 50 * cs, -car.vx * 0.25, -car.vy * 0.25, 1, car.drift); }
-      car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 27 : -27, a = tracks[s]; a.push(car.x - cs * 34 - sn * w, car.y - sn * 34 + cs * w); if (a.length > 520) a.splice(0, 2); } }
+      if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06) * (car.drift ? 4 : 1)) puff(car.x - cs * 38 + (Math.random() - 0.5) * 50 * sn, car.y - sn * 38 - (Math.random() - 0.5) * 50 * cs, -car.vx * 0.25 - (car.drift ? sn * l * 0.5 : 0), -car.vy * 0.25 + (car.drift ? cs * l * 0.5 : 0), 1, car.drift); }
+      car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 27 : -27, a = tracks[s]; const mx = car.x - cs * 34 - sn * w, my = car.y - sn * 34 + cs * w; a.push(mx, my); if (a.length > 520) a.splice(0, 2);
+        const k = tracks[2 + s]; if (car.drift) { k.push(mx, my); if (k.length > 420) k.splice(0, 2); } else if (k.length && !isNaN(k[k.length - 1])) k.push(NaN, NaN); } }
     }
   }
   if (run.chain && !car.air && !car.drift && car.twoT <= 0 && (run.chainT -= dt) <= 0) run.chain = 0; // the combo clock runs only between stunts
-  if ((car.air || car.roll) && tracks[0].length && !isNaN(tracks[0][tracks[0].length - 1])) { tracks[0].push(NaN, NaN); tracks[1].push(NaN, NaN); } // break the tyre marks
+  if (car.air || car.roll) for (const a of tracks) if (a.length && !isNaN(a[a.length - 1])) a.push(NaN, NaN); // break the tyre marks
   // the rim of the reserve turns the buggy back
   const d = Math.hypot(car.x, car.y); run.t += dt; if (d > run.far) run.far = d; if (sp > run.maxSp) run.maxSp = sp; // for the missions: the clock, how far from the camp, top speed
   if (d > R - 30) { const k = (d - (R - 30)) * 5 * dt; car.vx -= car.x / d * k * 60; car.vy -= car.y / d * k * 60; if (d > R + 60) { car.x *= (R + 60) / d; car.y *= (R + 60) / d; } if (edgeT <= 0) { note(T('edge'), '', 2); edgeT = 4; } }
-  edgeT -= dt; hitT -= dt;
+  edgeT -= dt; hitT -= dt; hintT -= dt;
   // solid things: bump and slow down
   const bump = (o, oy) => { const dx = car.x - o.x, dy = car.y - (o.y - oy), rr = o.rad + 27, d2 = dx * dx + dy * dy; if (d2 >= rr * rr || car.air) return false;
     const dd = Math.sqrt(d2) || 1, nx = dx / dd, ny = dy / dd, vn2 = car.vx * nx + car.vy * ny; car.x += nx * (rr - dd); car.y += ny * (rr - dd);
@@ -909,6 +935,7 @@ function update(dt) {
   const c2 = Math.cos(car.ang), s2 = Math.sin(car.ang), kt = Math.min(1, dt * 9);
   car.pit += ((car.air ? clamp(car.vz / 380, -0.5, 0.55) : car.roll ? 0 : Math.atan(gx * c2 + gy * s2)) - car.pit) * kt;
   car.rol += ((car.air || car.roll ? 0 : Math.atan(gy * c2 - gx * s2)) - car.rol) * kt;
+  { const c3 = Math.cos(car.ang), s3 = Math.sin(car.ang); car.dl += ((car.drift ? clamp((-car.vx * s3 + car.vy * c3) / 500, -0.15, 0.15) : 0) - car.dl) * Math.min(1, dt * 8); } // the body leans out of a slide
   car.lean += ((car.air || car.roll ? 0 : car.tside * clamp((car.tip - 0.1) / 0.9, 0, 1) * 0.62) - car.lean) * Math.min(1, dt * 10); // one side lifts as the car tips
   car.spin += (car.vx * c2 + car.vy * s2) / (12.5 * CS) * dt;
   const k = Math.min(1, dt * 4); camx += (car.x + car.vx * 0.3 - camx) * k; camy += (car.y + car.vy * 0.3 - camy) * k;
@@ -922,7 +949,7 @@ function drawCar(c) {
   const f = car.vx * cs + car.vy * sn, l = -car.vx * sn + car.vy * cs, ss = 1 - Math.min(0.4, alt / 400);
   c.save(); c.translate(car.x + 7 + alt * 0.4, car.y + 9 + alt * 0.3); c.rotate(car.ang); c.scale(ss, ss);
   c.fillStyle = 'rgba(60,30,15,' + (0.3 - Math.min(0.15, alt / 800)) + ')'; c.beginPath(); c.roundRect(-52, -33, 104, 66, 18); c.fill(); c.restore();
-  const tumble = car.roll ? -car.rside * car.rollT / 1.15 * TAU * 2 : car.lean + car.tip * 0.05 * Math.sin(t * 24);
+  const tumble = car.roll ? -car.rside * car.rollT / 1.15 * TAU * 2 : car.lean - car.dl + car.tip * 0.05 * Math.sin(t * 24);
   drawCar3D(c, car.x, car.y, 1, { ang: car.ang, pit: car.pit - car.fp, rol: car.rol + tumble, lift: alt + (car.roll ? 8 + Math.abs(Math.sin(tumble)) * 16 : Math.abs(Math.sin(car.lean)) * 34 + Math.abs(Math.sin(car.fp)) * 20), steer: car.steer, spin: car.spin,
     speed: f, lat: l, t, air: car.air && car.airT > 0.12, mouth: car.air || car.roll || car.tip > 0.35 ? 'o' : '', col });
   const live = car.drift && car.dsc > 12 ? T('st_drift') + ' ' + Math.round(car.dsc) : car.twoT > 0.25 ? T('st_two', car.twoT.toFixed(1)) : ''; // the stunt in progress, counted above the car
@@ -968,8 +995,9 @@ function render(dt) {
     const lg = c.createLinearGradient(0, goal.y - 520, 0, goal.y); lg.addColorStop(0, 'rgba(255,250,240,0)'); lg.addColorStop(1, 'rgba(255,250,240,.5)'); c.fillStyle = lg; c.fillRect(goal.x - 20, goal.y - 520, 40, 520);
   }
   c.strokeStyle = 'rgba(110,62,34,.3)'; c.lineWidth = 9; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); // tyre marks
-  for (const a of tracks) { let pen = false; for (let i = 0; i < a.length; i += 2) { if (isNaN(a[i])) { pen = false; continue; } if (pen) c.lineTo(a[i], a[i + 1]); else c.moveTo(a[i], a[i + 1]); pen = true; } }
-  c.stroke();
+  const marks = a => { let pen = false; for (let i = 0; i < a.length; i += 2) { if (isNaN(a[i])) { pen = false; continue; } if (pen) c.lineTo(a[i], a[i + 1]); else c.moveTo(a[i], a[i + 1]); pen = true; } };
+  marks(tracks[0]); marks(tracks[1]); c.stroke();
+  c.strokeStyle = 'rgba(96,48,24,.34)'; c.lineWidth = 13; c.beginPath(); marks(tracks[2]); marks(tracks[3]); c.stroke(); // where the car slid, the sand is ploughed deeper
   const inView = (x, y, m) => x > x0 - m && x < x1 + m && y > y0 - m && y < y1 + m;
   if (st !== 'menu' && st !== 'load') {
     const eD = spr('date'), eC = spr('can'); c.fillStyle = 'rgba(60,30,15,.2)';
@@ -1002,10 +1030,11 @@ function render(dt) {
       c.setTransform(u, 0, 0, u, ax, ay); c.rotate(a); c.fillStyle = '#1f7a74'; c.strokeStyle = '#fffaf0'; c.lineWidth = 3; c.lineJoin = 'round'; c.beginPath(); c.moveTo(24, 0); c.lineTo(-12, -16); c.lineTo(-4, 0); c.lineTo(-12, 16); c.closePath(); c.fill(); c.stroke();
       c.setTransform(u, 0, 0, u, ax - Math.cos(a) * 34, ay - Math.sin(a) * 34); c.font = '800 15px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 4; c.strokeStyle = INK; c.strokeText(nf(d / 8), 0, 0); c.fillStyle = '#fffaf0'; c.fillText(nf(d / 8), 0, 0); c.textBaseline = 'alphabetic'; }
   }
-  if (joy.on && st === 'play') { // the drag ring under the finger
-    c.setTransform(dpr, 0, 0, dpr, 0, 0); const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = Math.hypot(dx, dy) || 1, k = Math.min(1, JOY_R / m);
+  if (joy.on && st === 'play') { // the pad under the finger: the inner ring is driving, the outer ring is where pressing hard begins
+    c.setTransform(dpr, 0, 0, dpr, 0, 0); const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = Math.hypot(dx, dy) || 1, k = Math.min(1, HARD_R * 1.12 / m), hard = joy.hard;
     c.strokeStyle = 'rgba(255,250,240,.7)'; c.lineWidth = 3; c.beginPath(); c.arc(joy.ox, joy.oy, JOY_R, 0, TAU); c.stroke();
-    c.fillStyle = 'rgba(200,32,43,.8)'; c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.arc(joy.ox + dx * k, joy.oy + dy * k, 20, 0, TAU); c.fill(); c.stroke();
+    c.strokeStyle = hard ? 'rgba(255,138,60,.95)' : 'rgba(255,250,240,.4)'; c.lineWidth = hard ? 5 : 2.5; c.setLineDash(hard ? [] : [7, 9]); c.beginPath(); c.arc(joy.ox, joy.oy, HARD_R, 0, TAU); c.stroke(); c.setLineDash([]);
+    c.fillStyle = hard ? 'rgba(255,138,60,.95)' : 'rgba(200,32,43,.8)'; c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.arc(joy.ox + dx * k, joy.oy + dy * k, hard ? 24 : 20, 0, TAU); c.fill(); c.stroke();
   }
 }
 function drawMap(cnv, big) {
@@ -1060,7 +1089,7 @@ function muteUI() { $('menuMute').innerHTML = save.muted ? ICON_OFF : ICON_ON; $
 function toggleMute() { save.muted = !save.muted; persist(); unlockAudio(); muteUI(); }
 function showMenu() {
   st = 'menu'; resetCar(); for (const o of DATES) o.off = false; for (const o of CANS) o.off = false;
-  ['hud', 'miniBtn', 'pauseBtn', 'mute', 'driftBtn', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
+  ['hud', 'miniBtn', 'pauseBtn', 'mute', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
   const b = $('menuBest'); b.hidden = !save.best; b.textContent = T('best', save.best); releaseWake();
 }
 function startRun(rc) { // rc: a race to drive, or nothing for a free safari
@@ -1071,8 +1100,8 @@ function startRun(rc) { // rc: a race to drive, or nothing for a free safari
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
   $('distLbl').textContent = rc ? '' : T('m'); $('dateLbl').textContent = rc ? T('cp') : T('dates'); show('fuelBox', !rc);
   const mi = $('mis'); mi.hidden = !rc; if (rc) mi.textContent = T('raceHud', T('r_' + rc.id), fmtTime(raceTargets(rc)[2]));
-  camx = car.x; camy = car.y; hudKey = ''; joy.on = false; btnHb = false; $('driftBtn').classList.remove('on'); for (const k in keys) keys[k] = 0;
-  ['menu', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); ['hud', 'miniBtn', 'pauseBtn', 'mute', 'driftBtn'].forEach(id => show(id, true));
+  camx = car.x; camy = car.y; hudKey = ''; joy.on = joy.hard = false; hintT = 0; for (const k in keys) keys[k] = 0;
+  ['menu', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); ['hud', 'miniBtn', 'pauseBtn', 'mute'].forEach(id => show(id, true));
   for (const a of ANIMALS) a.seen = 0;
   save.runs++; persist(); drawMap($('mini')); wake();
 }
@@ -1081,7 +1110,7 @@ function resume() { if (st !== 'pause') return; unlockAudio(); st = 'play'; show
 async function endRun(early) {
   if (st !== 'play' && st !== 'pause') return;
   const dn = run.done, raced = !!run.race;
-  st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'driftBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
+  st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
   const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
   run.newBest = !raced && m > save.best; if (run.newBest) save.best = m; save.coins += total;
   endDrift(); endTwo(); checkMissions(); addXP(m / 40 + run.dates / 2 + run.stunt / 25);
@@ -1152,7 +1181,7 @@ function openSheet(id) {
       ttl.append(el('span', 'stars', '★'.repeat(m.d || 2)), ' ' + mText(m));
       const rw = el('span', 'rw'); rw.append(el('i', 'coin'), el('b', '', '+' + m.rw)); row.append(ttl, rw, pb, el('small', '', m.done ? T('mDoneShort') : mVal(m, v) + ' / ' + mVal(m, m.n)));
       if (!m.done && !run.live) { const sb = el('button', 'mswap', T('swap', swapCost())); sb.type = 'button'; // a mission you do not fancy can be swapped for a few dirhams
-        sb.onclick = () => { const cost = swapCost(); if (save.coins < cost) return note(T('notEnough')); save.coins -= cost; save.missions.splice(save.missions.indexOf(m), 1); fillMissions(); persist(); coinsUI(); play('power'); openSheet('missions'); }; row.append(sb); }
+        sb.onclick = () => { const cost = swapCost(); if (save.coins < cost) return note(T('notEnough')); save.coins -= cost; save.missions.splice(save.missions.indexOf(m), 1); fillMissions(m.t); persist(); coinsUI(); play('power'); openSheet('missions'); }; row.append(sb); }
       body.append(row); }
     body.append(el('p', 'hint', T('misNote', save.streak)));
   } else if (id === 'races') {
@@ -1185,7 +1214,7 @@ addEventListener('keyup', e => { keys[e.code] = 0; });
 // with preventDefault, so the browser's own gestures (scroll, zoom, the text loupe, drag and drop) can never take the finger away.
 // That matters most on iPad and iPhone, above all in the home-screen app. A mouse or a pen comes through pointer events.
 const TOUCH = 'ontouchstart' in window, own = e => { if (e.cancelable) e.preventDefault(); }, diag = { ts: 0, tm: 0, tc: 0, pd: 0, pc: 0, bl: 0 }; // counts of what the screen has reported, shown at the foot of How to play
-const joyStart = (src, id, x, y) => { if (st !== 'play') return; joy.on = true; joy.src = src; joy.id = id; joy.ox = joy.x = x; joy.oy = joy.y = y; }; // the newest finger takes over, so steering can never get stuck on a lost one
+const joyStart = (src, id, x, y) => { if (st !== 'play') return; joy.on = true; joy.hard = false; joy.src = src; joy.id = id; joy.ox = joy.x = x; joy.oy = joy.y = y; }; // the newest finger takes over, so steering can never get stuck on a lost one
 const joyMove = (src, id, x, y) => { if (!joy.on) joyStart(src, id, x, y); else if (joy.src === src && joy.id === id) { joy.x = x; joy.y = y; } }; // a finger that is still moving after the steering was dropped picks it up again
 const joyEnd = (src, id) => { if (joy.on && joy.src === src && joy.id === id) joy.on = false; };
 if (TOUCH) {
@@ -1200,12 +1229,7 @@ cv.addEventListener('pointermove', e => { if (joy.on && joy.src === 'p' && e.poi
 const pointerEnd = e => joyEnd('p', e.pointerId);
 for (const ev of ['pointerup', 'pointercancel']) { cv.addEventListener(ev, pointerEnd); addEventListener(ev, pointerEnd); }
 addEventListener('pointercancel', () => { diag.pc++; });
-addEventListener('blur', () => { diag.bl++; joy.on = false; btnHb = false; for (const k in keys) keys[k] = 0; });
-// the Drift button: hold it to slide, and in the air to flip or spin
-const db = $('driftBtn'), dbSet = on => e => { e.preventDefault(); btnHb = on; db.classList.toggle('on', on); if (on) { unlockAudio(); try { db.setPointerCapture(e.pointerId); } catch (err) {} } };
-db.addEventListener('pointerdown', dbSet(true)); for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) db.addEventListener(ev, dbSet(false));
-db.addEventListener('contextmenu', e => e.preventDefault());
-if (TOUCH) db.addEventListener('touchstart', own, { passive: false }); // a held finger must stay a held button, not a long-press menu
+addEventListener('blur', () => { diag.bl++; joy.on = false; for (const k in keys) keys[k] = 0; });
 cv.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 $('startBtn').onclick = () => startRun(); $('againBtn').onclick = () => startRun(run.race); $('overMenuBtn').onclick = showMenu;
@@ -1218,7 +1242,7 @@ const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, newMission, fillMissions, mProg, mText, slots, get hb() { return btnHb; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, newMission, fillMissions, mProg, mText, slots, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
