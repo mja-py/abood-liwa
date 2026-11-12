@@ -6,16 +6,17 @@ A free-roam dune safari for the browser, and a sister game to *Run, Abood!* and 
 
 ## How to play
 
-- **Touch:** put a finger anywhere and drag the way you want to go. Two rings appear under it: inside the first, the further you drag the faster you go; out past the second is *pressing hard*, which slides the car and does tricks in the air (see Stunts). There are no buttons to find.
+- **Touch:** put a finger anywhere and drag the way you want to go. Two rings appear under it: inside the first, the further you drag the faster you go; out past the second is *pressing hard*, which slides the car and does tricks in the air (see Stunts). There are no buttons to find. Drag backwards behind a car that is standing still, or held against something, and it reverses, swings its nose round to your finger and drives off.
 - **Keyboard:** arrow keys or WASD. Up accelerates, down brakes and reverses, left and right steer. P or Esc pauses.
-- **Dunes** are real ones in cross-section: a long gentle windward ramp that is still climbing at the crest, a sharp crest that catches the light, and a short dark slip face. They all face downwind. Build speed up the ramp and the car flies off the crest; coming the other way, the car drops into low gear and crawls up the slip face, so a run-up or a climb at an angle is quicker. Only Tal Moreeb is too steep to crawl up; stall there and Baba says so.
+- **Dunes** are real ones in cross-section: a long gentle windward ramp that is still climbing at the crest, a sharp crest that catches the light, and a short dark slip face. They all face downwind. Build speed up the ramp and the car flies off the crest; coming the other way, the engine pulls 60% harder uphill and drops into low gear at a crawl, so the car charges the slip face, throws a tail of sand, and has speed left to hop the crest. The steepest faces on Tal Moreeb can still stop it; stall there and Baba says so.
 - **Rolling:** driving across a steep slope, or landing sideways, rolls the car. It tumbles downhill, costs fuel, and Baba has something to say.
+- **Never stuck:** under power the car pivots even at a standstill, so a nose against a tent or a palm can always turn away. If it still has not moved a car's length in two and a half seconds of throttle, Baba tows it to open sand close by.
 - **Dates** turn into dirhams at the end of the run. A **red jerrycan** tops up the fuel.
 - **The run ends** when the fuel runs out.
 
 ## The map
 
-The reserve is a circle 6.8 km of pixels across, ringed by red flags. A round map sits in the top corner during a run (tap it for the big map): it shows the dunes, the car as a red arrow, jerrycans as red dots, and the 11 places. The first visit to a place gives its postcard and dirhams.
+The reserve is a circle 6.8 km of pixels across, ringed by red flags. A round map sits in the top corner during a run (tap it for the big map): it shows the dunes, the car as a red arrow, jerrycans as red dots, golden dates as yellow dots, and the 11 places; the big map also marks the ramps. The first visit to a place gives its postcard and dirhams.
 
 | Place | What is there |
 |---|---|
@@ -33,6 +34,14 @@ The reserve is a circle 6.8 km of pixels across, ringed by red flags. A round ma
 
 Camels and oryx wander near home and trot away from a fast car.
 
+Between the places the sand is a playground:
+
+- **Big dunes:** besides Tal Moreeb there are four more big dunes without a name, one in each quarter, 120 to 150 high.
+- **Ramps:** 18 wooden kickers, each turned to face the longest drop near it. Drive up one the way its arrows point and it throws the car; the faster in, the higher out. The first is a short drive from the camp.
+- **Hoops:** every second ramp has a red and white hoop to fly through, worth 120 stunt points once a run.
+- **Boost strips:** 12 strips of arrows on the sand give a shove the way they point. Some sit on the run-up to a ramp, so strip, ramp and hoop make one line.
+- **Golden dates:** worth ten dates each. One sits on top of each big dune, and four more move to new places every day.
+
 ## Stunts
 
 Every stunt scores points, shown above the car. Fifty points are worth one dirham at the end of the run, and there are missions for each kind.
@@ -46,9 +55,9 @@ Every stunt scores points, shown above the car. Fifty points are worth one dirha
 
 What keeps a run worth starting once every postcard is found:
 
-- **Missions:** dealt at random from 32 kinds, three at a time, a fourth from level 4 and a fifth from level 8. The HUD shows the one you are closest to finishing. Each finished mission is replaced after the run, never by a kind you just had, and the set is spread over six categories: collecting (dates, dates in the first minute, jerrycans, dirhams earned), driving (distance, distance without rolling, top speed, distance from the camp), stunts (air time, one long jump, drift points, one big drift, donuts, two wheels in total and in one go, flips, spins, stunt points, combo), exploring (places visited, drive to a named place, reach one against the clock, a delivery between two places, the Tal Moreeb summit, find the sand gazelles), races (finish one, win a medal) and five that add up over several runs.
+- **Missions:** dealt at random from 36 kinds, three at a time, a fourth from level 4 and a fifth from level 8. The first three are on the screen all through a run, each as a bar that fills. A finished one is ticked, then replaced a moment later in the same run by a new one that counts from that moment, and every third mission finished in one run pays a bonus. A replacement is never a kind you just had, and the set is spread over six categories: collecting (dates, dates in the first minute, jerrycans, dirhams earned, golden dates), driving (distance, distance without rolling, top speed, distance from the camp, boost strips), stunts (air time, one long jump, drift points, one big drift, donuts, two wheels in total and in one go, flips, spins, stunt points, combo, ramps, hoops), exploring (places visited, drive to a named place, reach one against the clock, a delivery between two places, the Tal Moreeb summit, find the sand gazelles), races (finish one, win a medal) and five that add up over several runs.
 - **Harder with level:** targets grow with your level up to a cap; each mission is one, two or three stars, and three-star missions go from about 1 in 12 at level 1 to nearly half from level 14 (an easy one is set as if two levels lower, a hard one four higher, and pays half as much again); and from level 5 some carry a twist: do it without rolling. A mission you do not fancy can be swapped in the Missions sheet for a few dirhams. The table of kinds is `MK` in `js/game.js`.
-- **Levels:** missions, postcards, races and every run give experience. Each level pays dirhams, unlocks races, and moves you up five ranks from Beginner to Desert falcon.
+- **Levels:** missions, postcards, races and every run give experience; each level needs more than the last (125, 190, 265 … ). Each level pays dirhams, tops up the tank if it comes mid-run, and moves you up five ranks from Beginner to Desert falcon. Most levels open something: races at 2, 4, 5 and 7, the pickup at 3, a fourth mission at 4, the sand buggy at 6, a fifth mission at 8, the monster truck at 10. The results card and the Missions sheet always show the bar and the next thing it unlocks.
 - **Races:** drive through places in order against the clock for bronze, silver and gold. Five fixed races unlock by level, and a race of the day changes daily. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
 - **Daily gift:** dirhams for the first visit each day, growing over seven days in a row.
 - **Upgrades:** engine, tyres, balance, tank and date basket, five levels each (100, 250, 500, 900, 1,500).
@@ -63,7 +72,7 @@ In-game dirhams only; there are no real payments. Progress is saved on the devic
 
 - **End of run:** 10 dates = 1 dirham, plus 1 per 250 m driven, plus 1 per 50 stunt points.
 - **Postcards:** 10 to 58 dirhams each, once, more for places far from the camp.
-- **Garage:** five car colours (white is free; 150, 300, 500, 1,000) and the five upgrades.
+- **Garage:** four trucks, five colours (white is free; 150, 300, 500, 1,000) and the five upgrades. The trucks open by level and are then bought, and each drives differently: the dune car (free, balanced), the pickup (level 3, 400: steadier, bigger tank), the sand buggy (level 6, 900: quicker and flies further off a crest, but rolls more easily and carries less fuel) and the monster truck (level 10, 2,000: giant tyres, hardest to roll, strongest uphill). The numbers are `TRUCKS` in `js/game.js`.
 
 ## How it is built
 

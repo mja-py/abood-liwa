@@ -19,7 +19,7 @@ const APP = !!navigator.standalone || matchMedia('(display-mode: standalone), (d
 
 // ---------- save data ----------
 const SAVE_KEY = 'abood-liwa-v1';
-const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], tank: 0, muted: false, runs: 0, xp: 0, lvl: 1, up: {}, missions: [], mrec: [], medals: {}, times: {}, day: '', streak: 0 };
+const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], tank: 0, muted: false, runs: 0, xp: 0, lvl: 1, up: {}, missions: [], mrec: [], medals: {}, times: {}, day: '', streak: 0, truck: 'classic', trucks: ['classic'] };
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 save.up = Object.assign({ engine: 0, tyres: 0, balance: 0, tank: Math.min(5, save.tank || 0), magnet: 0 }, save.up);
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
@@ -39,6 +39,8 @@ const SITES = [
 ];
 for (const s of SITES) { s.f2 = s.r * s.r; s.coins = Math.round(10 + Math.hypot(s.x, s.y) / 60); }
 const site = id => SITES.find(s => s.id === id);
+// four more big dunes without a name, so there is high ground to climb and fly off in every quarter of the reserve
+const HILLS = [{ x: 2600, y: -900, h: 150 }, { x: -900, y: -1300, h: 120 }, { x: -1700, y: 2200, h: 140 }, { x: 1900, y: 2000, h: 130 }];
 
 function hash2(ix, iy) { let n = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ 0x5bd1e995; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
 function vn(x, y) { // smooth value noise
@@ -58,6 +60,7 @@ function H(x, y) {
   let h = dune((x * WX + y * WY) / 560 + w * 0.7, 0.68) * 95 * amp // the bend in the crest lines is kept gentle enough that every slip face looks downwind
     + ridge((x * 0.5 - y * 0.866) / 250 + w * 0.9 + 3.1, 0.66) * 12 * (0.4 + amp * 0.6)
     + vn(x * 0.0024 + 1.7, y * 0.0024 + 5.1) * 12;
+  for (const q of HILLS) { const dx = x - q.x, dy = y - q.y, d2 = dx * dx + dy * dy; if (d2 < 1.176e6) h += q.h * (Math.exp(-d2 / 160000) - 6.4e-4); }
   for (const s of SITES) {
     const dx = x - s.x, dy = y - s.y, d2 = dx * dx + dy * dy;
     // Each bump is lowered by its own value at the edge where it is cut off (e^-7.346 and e^-6), so it meets the dunes with no step.
@@ -265,7 +268,7 @@ function drawAvatar(cnv, ph, mood) { // the menu card: Abood in his car, turning
   c.fillStyle = '#e3ad68'; c.strokeStyle = INK; c.lineWidth = S / 62; c.beginPath(); c.moveTo(-5, S * 0.74); c.quadraticCurveTo(S * 0.3, S * 0.62, S * 0.62, S * 0.72); c.quadraticCurveTo(S * 0.85, S * 0.79, S + 5, S * 0.68); c.lineTo(S + 5, S + 5); c.lineTo(-5, S + 5); c.closePath(); c.fill(); c.stroke();
   const a = Math.PI / 2 + Math.sin(ph * 0.11) * 1.05;
   c.fillStyle = 'rgba(43,26,18,.2)'; c.beginPath(); c.ellipse(S / 2 + S * 0.02, S * 0.86, S * 0.3, S * 0.1, 0, 0, TAU); c.fill();
-  drawCar3D(c, S / 2, S * 0.84, S / 300 * 1.72, { ang: a, steer: Math.cos(ph * 0.11) * 0.7, spin: ph * 0.6, speed: 150, t: ph * 0.2, mouth: mood === 'o' ? 'o' : '', col: COLORS[save.color] || COLORS.white });
+  drawCar3D(c, S / 2, S * 0.84, S / 300 * 1.72, { ang: a, steer: Math.cos(ph * 0.11) * 0.7, spin: ph * 0.6, speed: 150, t: ph * 0.2, mouth: mood === 'o' ? 'o' : '', col: COLORS[save.color] || COLORS.white, truck: save.truck });
 }
 
 // ---------- art: the car, a small 3D model drawn in code ----------
@@ -302,37 +305,74 @@ function mLine(out, pts, col, w, o) {
   let mx = 0, my = 0, mz = 0; const n = pts.length / 3; for (let i = 0; i < pts.length; i += 3) { mx += pts[i]; my += pts[i + 1]; mz += pts[i + 2]; }
   const it = { k: 'l', m: pts, c: [mx / n, my / n, mz / n], col, w }; if (o) Object.assign(it, o); out.push(it);
 }
-const WHEELS = [[-25, -20, 0], [-25, 20, 0], [25, -20, 1], [25, 20, 1]], TYRE = '#2a2623', STEEL = '#2f2a27';
-function buildCar() { // the parts that never move
-  const M = [];
-  mHull(M, [-34, 30, -13, 13, 8], [-36, 33, -15, 15, 20], 'main');                                   // the tub
+const TYRE = '#2a2623', STEEL = '#2f2a27';
+// The trucks. Each has its own body and its own feel: wb and wt are half the wheelbase and half the track, rf and rr the front and rear wheel
+// radius, ww the tyre width, lift how far the body is raised. Then what it changes in the driving: acc (engine, as a factor), grip, tip
+// (how much slope it takes to roll), rr (drag of soft sand), cl (extra pull uphill), hop (how hard it leaves a crest), tank (extra fuel).
+const TRUCKS = {
+  classic: { lvl: 1, cost: 0, wb: 25, wt: 20, rf: 12.5, rr0: 12.5, ww: 10.5, lift: 0, acc: 1, grip: 0, tip: 0, rr: 0, cl: 0.6, hop: 1.15, tank: 0 },
+  pickup: { lvl: 3, cost: 400, wb: 28, wt: 21, rf: 13, rr0: 13, ww: 10.5, lift: 1, acc: 0.98, grip: 0.35, tip: 0.045, rr: 0, cl: 0.7, hop: 1.1, tank: 20 },
+  buggy: { lvl: 6, cost: 900, wb: 27, wt: 21, rf: 11, rr0: 14.5, ww: 9.5, lift: 0, acc: 1.17, grip: -0.25, tip: -0.03, rr: -5, cl: 0.55, hop: 1.3, tank: -10 },
+  monster: { lvl: 10, cost: 2000, wb: 27, wt: 25, rf: 18, rr0: 18, ww: 13, lift: 11, acc: 1.06, grip: 0.5, tip: 0.085, rr: -9, cl: 1, hop: 1.2, tank: 10 },
+};
+const truckOf = () => TRUCKS[save.truck] || TRUCKS.classic;
+function buildCar(kind) { // the parts that never move
+  const M = [], tk = TRUCKS[kind], lights = (x, y0) => { for (const y of [-9, -3, 3, 9]) mHull(M, [x - 1.5, x + 1.5, y - 2.4, y + 2.4, y0], [x - 1.5, x + 1.5, y - 2.4, y + 2.4, y0 + 4.5], '#ffd95a', { raw: 1 }); };
+  const abood = () => { mLine(M, [9, 0, 25, 3.5, 0, 31.5], '#1b1715', 1.8);                                 // steering column
+    mHull(M, [-12.5, -3.5, -7, 7, 21], [-12.5, -4.5, -8.8, 8.8, 39], '#fbfaf4');                               // Abood's kandura
+    mLine(M, [-4.2, 0, 38.5, -3.8, 0, 31], '#cfc9ba', 0.9, { b: 0.5 }); };                                   // its tassel
+  if (kind === 'buggy') { // a sand rail: a low narrow tub inside a cage of tubes, the engine out in the open at the back
+    mHull(M, [-30, 27, -10, 10, 10], [-32, 29, -12, 12, 20], 'main');                                    // the tub
+    mHull(M, [27, 39, -8, 8, 11], [28, 36, -5, 5, 18], 'main');                                          // nose
+    mFace(M, [8, -3, 20.2, 28, -3, 20.2, 28, 3, 20.2, 8, 3, 20.2], 'trim', 18, 0, 0, { b: 0.6, noInk: 1 });
+    mFace(M, [-17, -10.5, 20.2, 8, -10.5, 20.2, 8, 10.5, 20.2, -17, 10.5, 20.2], '#3a322c', 0, 0, 0, { b: 0.4 });
+    mHull(M, [6, 9, -11, 11, 20], [6, 9, -11, 11, 27], 'dark');                                          // dashboard
+    mHull(M, [-17, -12.5, -9.5, 9.5, 20], [-18, -13.5, -9.5, 9.5, 36], '#4a4440');                       // seat back
+    mHull(M, [-38, -22, -9, 9, 18], [-37, -23, -8, 8, 29], '#4a4440');                                   // engine
+    mHull(M, [-34, -26, -6, 6, 29], [-33, -27, -5, 5, 33], '#b3261e');                                   // its red cover
+    for (const sg of [-1, 1]) { mLine(M, [-36, sg * 6, 26, -44, sg * 7, 30, -46, sg * 7, 38], '#8a817a', 2.6, { ol: 1 });     // exhausts
+      mHull(M, [37, 39, sg * 5 - 2.4, sg * 5 + 2.4, 17], [37, 39, sg * 5 - 2.4, sg * 5 + 2.4, 21.5], '#fff3c4', { raw: 1 });  // headlights
+      mHull(M, [-39, -38, sg * 7 - 2, sg * 7 + 2, 21], [-39, -38, sg * 7 - 2, sg * 7 + 2, 24], '#e8112d', { raw: 1 });
+      mLine(M, [9, sg * 12, 20, 4, sg * 12, 46, -20, sg * 12, 58, -37, sg * 9, 29], 'trim', 2.6, { ol: 1 });                 // the cage, one side
+      mLine(M, [-20, sg * 12, 58, -18, sg * 12, 20], 'trim', 2.6, { ol: 1 }); }
+    mLine(M, [4, -12, 46, 4, 12, 46], 'trim', 2.6, { ol: 1 }); mLine(M, [-20, -12, 58, -20, 12, 58], 'trim', 2.6, { ol: 1 });
+    lights(-20, 58.5); abood(); return M;
+  }
+  const pick = kind === 'pickup', bk = pick ? -47 : -36; // the pickup carries a long open load bed where the others have a rear deck
+  mHull(M, [bk + 2, 30, -13, 13, 8], [bk, 33, -15, 15, 20], 'main');                                 // the tub
   mHull(M, [8, 33, -15, 15, 20], [11, 30, -12, 12, 26], 'main');                                     // bonnet
   mFace(M, [12, -3, 26.2, 29.5, -3, 26.2, 29.5, 3, 26.2, 12, 3, 26.2], 'trim', 20, 0, 0, { b: 0.6, noInk: 1 }); // racing stripe
-  mHull(M, [-36, -16, -15, 15, 20], [-35, -17, -14, 14, 25], 'main');                                // rear deck
+  if (pick) { mFace(M, [-46, -13, 20.2, -18, -13, 20.2, -18, 13, 20.2, -46, 13, 20.2], '#5a4a3c', 0, 0, 0, { b: 0.3 });           // bed floor
+    for (const sg of [-1, 1]) mHull(M, [-47, -18, sg * 14 - 1, sg * 14 + 1, 20], [-47, -18, sg * 14 - 1, sg * 14 + 1, 28.5], 'main'); // bed sides
+    mHull(M, [-48, -46, -15, 15, 20], [-48, -46, -15, 15, 28.5], 'main');                              // tailgate
+    mFace(M, [-48.2, -9, 22, -48.2, 9, 22, -48.2, 9, 26.5, -48.2, -9, 26.5], 'trim', 0, 0, 24, { b: 0.5, noInk: 1 });
+    mHull(M, [-19, -17, -15, 15, 20], [-19, -17, -15, 15, 33], 'main');                                // back of the cab
+    mHull(M, [-44, -34, -11, -1, 20.5], [-44, -34, -11, -1, 28], '#8a5a34'); mHull(M, [-43, -35, -10, -2, 28], [-43, -35, -10, -2, 30], '#6b3d1c'); // a crate of dates
+    mHull(M, [-31, -25, 3, 10, 20.5], [-31, -25, 3, 10, 30], '#b3261e');                               // jerrycan
+    mCyl(M, [-38, 6, 24], [0, 0, 1], [1, 0, 0], [0, 1, 0], 8.5, 6, 10, TYRE, '#3a3531'); }             // spare wheel, lying flat
+  else { mHull(M, [-36, -16, -15, 15, 20], [-35, -17, -14, 14, 25], 'main');                           // rear deck
+    mHull(M, [-33, -27, 5, 12, 25], [-33, -27, 5, 12, 34], '#b3261e');                                 // jerrycan
+    mCyl(M, [-39.5, 0, 21], [1, 0, 0], [0, 1, 0], [0, 0, 1], 9, 6, 10, TYRE, '#3a3531'); }             // spare wheel
   mFace(M, [-16, -12.5, 20.2, 8, -12.5, 20.2, 8, 12.5, 20.2, -16, 12.5, 20.2], '#3a322c', 0, 0, 0, { b: 0.4 }); // cockpit floor
   mHull(M, [-16, 8, -15, -13, 20], [-16, 8, -15, -13, 27], 'main'); mHull(M, [-16, 8, 13, 15, 20], [-16, 8, 13, 15, 27], 'main'); // doors
   mHull(M, [6, 9, -13, 13, 20], [6, 9, -13, 13, 28], 'dark');                                        // dashboard
   mHull(M, [-17, -12.5, -9.5, 9.5, 20], [-18, -13.5, -9.5, 9.5, 36], '#4a4440');                     // seat back
+  const gz = 25.6 + Math.max(0, tk.rf - 12.5 - tk.lift), gy = tk.wt - tk.ww / 2 - 0.5;               // mudguards sit just over the tyres
   for (const sg of [-1, 1]) {
     mHull(M, [33, 34.6, sg * 9 - 3, sg * 9 + 3, 20.5], [33, 34.6, sg * 9 - 3, sg * 9 + 3, 25], '#fff3c4', { raw: 1 });   // headlights
-    mHull(M, [-36.6, -35.5, sg * 10 - 2.5, sg * 10 + 2.5, 21], [-36.6, -35.5, sg * 10 - 2.5, sg * 10 + 2.5, 24], '#e8112d', { raw: 1 }); // tail lights
-    for (const wx of [-25, 25]) { const y0 = sg > 0 ? 15 : -26, y1 = sg > 0 ? 26 : -15; mHull(M, [wx - 14, wx + 14, y0, y1, 25.6], [wx - 11, wx + 11, y0, y1, 27.4], 'main'); } // mudguards
+    mHull(M, [bk - 0.6, bk + 0.5, sg * 10 - 2.5, sg * 10 + 2.5, 21], [bk - 0.6, bk + 0.5, sg * 10 - 2.5, sg * 10 + 2.5, 24], '#e8112d', { raw: 1 }); // tail lights
+    for (const wx of [-tk.wb, tk.wb]) { const y0 = sg > 0 ? Math.min(15, gy) : -gy - tk.ww - 1, y1 = sg > 0 ? gy + tk.ww + 1 : -Math.min(15, gy); mHull(M, [wx - 14, wx + 14, y0, y1, gz], [wx - 11, wx + 11, y0, y1, gz + 1.8], 'main'); }
   }
   mFace(M, [33.3, -5, 12.5, 33.3, 5, 12.5, 33.3, 5, 19, 33.3, -5, 19], '#2a2623', 0, 0, 16, { b: 0.5 });  // grille
-  mHull(M, [-33, -27, 5, 12, 25], [-33, -27, 5, 12, 34], '#b3261e');                                 // jerrycan
-  mCyl(M, [-39.5, 0, 21], [1, 0, 0], [0, 1, 0], [0, 0, 1], 9, 6, 10, TYRE, '#3a3531');               // spare wheel
   mLine(M, [-18, -14, 25, -21, -14, 58, -21, 14, 58, -18, 14, 25], STEEL, 2.8, { ol: 1 });           // roll bar, behind Abood
   mLine(M, [-21, -14, 58, -34, -13, 25], STEEL, 2.4, { ol: 1 }); mLine(M, [-21, 14, 58, -34, 13, 25], STEEL, 2.4, { ol: 1 });
-  for (const y of [-9, -3, 3, 9]) mHull(M, [-22.5, -19.5, y - 2.4, y + 2.4, 58.5], [-22.5, -19.5, y - 2.4, y + 2.4, 63], '#ffd95a', { raw: 1 }); // roof lights
+  lights(-21, 58.5);                                                                                 // roof lights
   mLine(M, [9, -13, 27, 6.5, -13, 39, 6.5, 13, 39, 9, 13, 27], STEEL, 1.8);                          // windscreen frame
   mFace(M, [9, -13, 27, 6.5, -13, 39, 6.5, 13, 39, 9, 13, 27], '#cfeef4', 0, 0, 33, { ds: 1, raw: 1, a: 0.3, noInk: 1 });
   mLine(M, [34, -13, 11, 38, -13, 21, 38, 13, 21, 34, 13, 11], '#8a817a', 2.4, { ol: 1 }); mLine(M, [38, -13, 16, 38, 13, 16], '#8a817a', 2, { ol: 1 }); // bull bar
-  mLine(M, [9, 0, 25, 3.5, 0, 31.5], '#1b1715', 1.8);                                               // steering column
-  mHull(M, [-12.5, -3.5, -7, 7, 21], [-12.5, -4.5, -8.8, 8.8, 39], '#fbfaf4');                               // Abood's kandura
-  mLine(M, [-4.2, 0, 38.5, -3.8, 0, 31], '#cfc9ba', 0.9, { b: 0.5 });                                    // its tassel
-  return M;
+  abood(); return M;
 }
-const CAR_STATIC = buildCar(), carItems = [];
+const MODELS = {}, carItems = [], modelOf = kind => MODELS[kind] || (MODELS[kind] = buildCar(kind));
 const comb = (a, ka, b, kb, c, kc) => { const x = a[0] * ka + b[0] * kb + c[0] * kc, y = a[1] * ka + b[1] * kb + c[1] * kc, z = a[2] * ka + b[2] * kb + c[2] * kc, l = Math.hypot(x, y, z) || 1; return [x / l, y / l, z / l]; };
 function drawHead(c, hx, hy, r, f, s, u, mouth, sc) { // Abood's head: red shemagh, black agal, big eyes
   const hp = (v, m) => [hx + v[0] * m, hy + (v[1] * ES - v[2] * EC) * m], see = v => v[1] * EC + v[2] * ES;
@@ -364,15 +404,17 @@ function drawCar3D(c, x, y, sc, o) {
   const GA = c.globalAlpha, col = o.col, k = CS * sc, th = o.pit || 0, ph = o.rol || 0, cp = Math.cos(th), sp = Math.sin(th), cr = Math.cos(ph), sr = Math.sin(ph), ca = Math.cos(o.ang), sa = Math.sin(o.ang);
   const yaw = (vx, vy, vz) => [vx * ca - vy * sa, vx * sa + vy * ca, vz];
   const F = yaw(cp, 0, sp), R = yaw(-sp * sr, cr, cp * sr), U = yaw(-sp * cr, -sr, cp * cr), oy = y - (o.lift || 0) * 0.7 * sc;
-  const st = (o.steer || 0) * 0.5, spd = o.speed || 0, tt = o.t || 0, spin = o.spin || 0, D = [];
+  const st = (o.steer || 0) * 0.5, spd = o.speed || 0, tt = o.t || 0, spin = o.spin || 0, D = [], Wl = [], kind = TRUCKS[o.truck] ? o.truck : 'classic', tk = TRUCKS[kind], lift = tk.lift;
   // wheels: the front pair turns with the steering, all four spin
-  for (const [wx, wy, front] of WHEELS) {
-    const s = front ? st : 0, a = [-Math.sin(s), Math.cos(s), 0], u = [Math.cos(s), Math.sin(s), 0], v = [0, 0, 1], sg = Math.sign(wy), cx = wx, cy = wy, cz = 12.5;
-    mCyl(D, [cx, cy, cz], a, u, v, 12.5, 10.5, 12, TYRE, '#3a3531');
-    const hub = [], hx = cx + a[0] * sg * 5.6, hy = cy + a[1] * sg * 5.6; for (let i = 0; i < 6; i++) { const an = spin + i / 6 * TAU, cs = Math.cos(an) * 6.6, sn = Math.sin(an) * 6.6; hub.push(hx + u[0] * cs, hy + u[1] * cs, cz + sn); }
-    const hf = mFace(D, hub, '#d9cfbd', cx, cy, cz, { b: 0.8 });
-    mLine(D, [hub[0], hub[1], hub[2], hub[9], hub[10], hub[11]], '#6b635c', 1.3, { b: 1.2, n: hf.n }); mLine(D, [hub[3], hub[4], hub[5], hub[12], hub[13], hub[14]], '#6b635c', 1.3, { b: 1.2, n: hf.n });
+  for (const [fx, fy] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+    const front = fx > 0, rad = front ? tk.rf : tk.rr0, s = front ? st : 0, a = [-Math.sin(s), Math.cos(s), 0], u = [Math.cos(s), Math.sin(s), 0], v = [0, 0, 1], sg = fy, cx = fx * tk.wb, cy = fy * tk.wt, cz = rad, hr = rad * 0.53;
+    mCyl(Wl, [cx, cy, cz], a, u, v, rad, tk.ww, 12, TYRE, '#3a3531');
+    const hub = [], hx = cx + a[0] * sg * (tk.ww / 2 + 0.35), hy = cy + a[1] * sg * (tk.ww / 2 + 0.35); for (let i = 0; i < 6; i++) { const an = spin + i / 6 * TAU, cs = Math.cos(an) * hr, sn = Math.sin(an) * hr; hub.push(hx + u[0] * cs, hy + u[1] * cs, cz + sn); }
+    const hf = mFace(Wl, hub, '#d9cfbd', cx, cy, cz, { b: 0.8 });
+    mLine(Wl, [hub[0], hub[1], hub[2], hub[9], hub[10], hub[11]], '#6b635c', 1.3, { b: 1.2, n: hf.n }); mLine(Wl, [hub[3], hub[4], hub[5], hub[12], hub[13], hub[14]], '#6b635c', 1.3, { b: 1.2, n: hf.n });
+    if (lift > 4) mLine(Wl, [cx, fy * (tk.wt - tk.ww / 2 - 1), cz, cx * 0.8, fy * 9, 8 + lift], '#e0a72a', 2.6, { ol: 1, b: -2 }); // a lifted truck shows its springs
   }
+  for (const it of Wl) it.w = 1; // wheels stay on the ground; everything else rides at the body's height
   // Abood: arms on the wheel (up in the air on a jump), the steering wheel, the tail of his shemagh streaming back
   const up = o.air, hl = up ? [-3, -15, 64] : [2.6 - st * 2.4, -4.4, 31.8 + st * 2], hr = up ? [-3, 15, 64] : [2.6 + st * 2.4, 4.4, 31.8 - st * 2];
   mLine(D, [-8, -9, 37, hl[0], hl[1], hl[2]], '#fbfaf4', 4.6, { ol: 1 }); mLine(D, [-8, 9, 37, hr[0], hr[1], hr[2]], '#fbfaf4', 4.6, { ol: 1 });
@@ -393,15 +435,16 @@ function drawCar3D(c, x, y, sc, o) {
   const add = it => {
     if (it.n) { const n = it.n, nx = F[0] * n[0] + R[0] * n[1] + U[0] * n[2], ny = F[1] * n[0] + R[1] * n[1] + U[1] * n[2], nz = F[2] * n[0] + R[2] * n[1] + U[2] * n[2], vis = ny * VY + nz * VZ;
       if (vis <= 0.02 && !it.ds) return; it.f = 0.72 + 0.4 * Math.max(0, (nx * SUNX + ny * SUNY + nz * SUNZ) * (vis < 0 ? -1 : 1)); }
-    const m = it.c; it.d = (F[1] * m[0] + R[1] * m[1] + U[1] * m[2]) * VY + (F[2] * m[0] + R[2] * m[1] + U[2] * m[2]) * VZ + (it.b || 0); carItems.push(it);
+    const m = it.c, mz = m[2] + (it.w ? 0 : lift); it.d = (F[1] * m[0] + R[1] * m[1] + U[1] * mz) * VY + (F[2] * m[0] + R[2] * m[1] + U[2] * mz) * VZ + (it.b || 0); carItems.push(it);
   };
-  for (const it of CAR_STATIC) add(it); for (const it of D) add(it);
+  for (const it of modelOf(kind)) add(it); for (const it of D) add(it); for (const it of Wl) add(it);
   carItems.sort((a, b) => a.d - b.d);
-  const path = m => { c.beginPath(); for (let i = 0; i < m.length; i += 3) { const X = F[0] * m[i] + R[0] * m[i + 1] + U[0] * m[i + 2], Y = F[1] * m[i] + R[1] * m[i + 1] + U[1] * m[i + 2], Z = F[2] * m[i] + R[2] * m[i + 1] + U[2] * m[i + 2]; if (i) c.lineTo(x + X * k, oy + (Y - ZS * Z) * k); else c.moveTo(x + X * k, oy + (Y - ZS * Z) * k); } };
-  const pt = m => { const X = F[0] * m[0] + R[0] * m[1] + U[0] * m[2], Y = F[1] * m[0] + R[1] * m[1] + U[1] * m[2], Z = F[2] * m[0] + R[2] * m[1] + U[2] * m[2]; return [x + X * k, oy + (Y - ZS * Z) * k]; };
+  let zo = 0; // the height added to the part being drawn
+  const path = m => { c.beginPath(); for (let i = 0; i < m.length; i += 3) { const z = m[i + 2] + zo, X = F[0] * m[i] + R[0] * m[i + 1] + U[0] * z, Y = F[1] * m[i] + R[1] * m[i + 1] + U[1] * z, Z = F[2] * m[i] + R[2] * m[i + 1] + U[2] * z; if (i) c.lineTo(x + X * k, oy + (Y - ZS * Z) * k); else c.moveTo(x + X * k, oy + (Y - ZS * Z) * k); } };
+  const pt = m => { const z = m[2] + zo, X = F[0] * m[0] + R[0] * m[1] + U[0] * z, Y = F[1] * m[0] + R[1] * m[1] + U[1] * z, Z = F[2] * m[0] + R[2] * m[1] + U[2] * z; return [x + X * k, oy + (Y - ZS * Z) * k]; };
   c.lineJoin = 'round'; c.lineCap = 'round';
   for (const it of carItems) {
-    const hex = it.col && (it.col[0] === '#' ? it.col : col[it.col]);
+    const hex = it.col && (it.col[0] === '#' ? it.col : col[it.col]); zo = it.w ? 0 : lift;
     if (it.k === 'f') { path(it.m); c.closePath(); if (it.a) c.globalAlpha = it.a * GA; c.fillStyle = it.raw ? hex : shade(hex, it.f); c.fill(); if (it.a) c.globalAlpha = GA;
       if (!it.noInk) { c.strokeStyle = it.ink || INK; c.lineWidth = (it.iw || 1.25) * sc; c.stroke(); } }
     else if (it.k === 'l') { path(it.m); if (it.ol) { c.strokeStyle = INK; c.lineWidth = (it.w + 1.7) * k; c.stroke(); } c.strokeStyle = hex; c.lineWidth = it.w * k; c.stroke(); }
@@ -594,8 +637,9 @@ function blit(c, e, x, y, flip) {
 }
 
 // ---------- things placed on the map ----------
+const dayKey = (d = new Date()) => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
 function rng(seed) { return () => { seed = seed + 0x6D2B79F5 | 0; let v = Math.imul(seed ^ seed >>> 15, 1 | seed); v = v + Math.imul(v ^ v >>> 7, 61 | v) ^ v; return ((v ^ v >>> 14) >>> 0) / 4294967296; }; }
-const PROPS = [], DATES = [], CANS = [], ANIMALS = [];
+const PROPS = [], DATES = [], CANS = [], ANIMALS = [], RAMPS = [], HOOPS = [], PADS = [], GOLD = [];
 (function place() {
   const P = (kind, x, y, flip) => PROPS.push({ kind, x, y, flip: !!flip, rad: KIND[kind][2] });
   let q = site('camp'); P('tent', q.x, q.y - 70); P('fire', q.x - 105, q.y + 34); P('baba', q.x - 60, q.y - 4); P('palm', q.x + 138, q.y - 58); P('flag', q.x + 92, q.y - 96);
@@ -621,6 +665,29 @@ const PROPS = [], DATES = [], CANS = [], ANIMALS = [];
   CANS.push({ x: 540, y: -280 });
   for (let tries = 0; CANS.length < 16 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.sqrt(r()) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
     if (CANS.every(o => Math.hypot(o.x - x, o.y - y) > 640) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) CANS.push({ x, y }); }
+  // The playground. Ramps: wooden kickers that throw the car into the air, each turned to face the longest drop it can find. Half of them
+  // have a hoop to fly through, and some a boost strip on the run-up, so a strip, a ramp and a hoop make one line to drive.
+  const slope = (x, y) => Math.hypot(H(x + 6, y) - H(x - 6, y), H(x, y + 6) - H(x, y - 6)) / 12;
+  const open = (x, y, m) => Math.hypot(x, y) < R - 420 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + m) && PROPS.every(p => !p.rad || Math.hypot(p.x - x, p.y - y) > p.rad + 90);
+  for (let tries = 0; RAMPS.length < 18 && tries < 6000; tries++) {
+    const first = !RAMPS.length, a = r() * TAU, d = first ? 420 + r() * 160 : 500 + Math.sqrt(r()) * (R - 1000), x = Math.cos(a) * d, y = Math.sin(a) * d;
+    if (!open(x, y, 170) || slope(x, y) > 0.15 || RAMPS.some(o => Math.hypot(o.x - x, o.y - y) < 560)) continue;
+    let dir = -1, low = 1e9; for (let k = 0; k < 16; k++) { const an = k / 16 * TAU, cs = Math.cos(an), sn = Math.sin(an);
+      if (slope(x - cs * 150, y - sn * 150) > 0.3 || H(x - cs * 150, y - sn * 150) > H(x, y) + 22) continue; // the run-up has to be drivable
+      const hh = H(x + cs * 150, y + sn * 150) + H(x + cs * 300, y + sn * 300); if (hh < low) { low = hh; dir = an; } }
+    if (dir < 0) continue;
+    const cs = Math.cos(dir), sn = Math.sin(dir), i = RAMPS.length; RAMPS.push({ kind: 'ramp', x, y, a: dir, cs, sn });
+    if (i % 2 === 0) HOOPS.push({ kind: 'hoop', x: x + cs * 145, y: y + sn * 145, a: dir, cs, sn }); // close enough that the car is at ring height as it passes, slow or boosted
+    if (i % 3 === 0 && open(x - cs * 330, y - sn * 330, 60)) PADS.push({ x: x - cs * 330, y: y - sn * 330, a: dir, cs, sn, cd: 0 });
+  }
+  for (let tries = 0, n = PADS.length + 7; PADS.length < n && tries < 3000; tries++) { // more boost strips out on the open sand, pointing downwind where the crests are
+    const a = r() * TAU, d = 600 + Math.sqrt(r()) * (R - 1100), x = Math.cos(a) * d, y = Math.sin(a) * d, dir = Math.atan2(WY, WX) + (r() - 0.5) * 0.9;
+    if (open(x, y, 120) && slope(x, y) < 0.2 && PADS.every(o => Math.hypot(o.x - x, o.y - y) > 500) && RAMPS.every(o => Math.hypot(o.x - x, o.y - y) > 200)) PADS.push({ x, y, a: dir, cs: Math.cos(dir), sn: Math.sin(dir), cd: 0 });
+  }
+  // Golden dates, worth ten each: one on the top of every big dune, and four more that move to new places every day.
+  for (const q of HILLS) GOLD.push({ x: q.x, y: q.y });
+  { let h = 11; for (const ch of dayKey()) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0; const g = rng(h);
+    for (let tries = 0; GOLD.length < HILLS.length + 4 && tries < 2000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 700)) GOLD.push({ x, y }); } }
   const herd = (kind, id, n, spread) => { const s = typeof id === 'string' ? site(id) : id; for (let k = 0; k < n; k++) { const a = k / n * TAU + 0.6, x = s.x + Math.cos(a) * spread, y = s.y + Math.sin(a) * spread * 0.7;
     ANIMALS.push({ kind, x, y, hx: s.x, hy: s.y, tx: x, ty: y, ph: k, dir: k % 2 ? 1 : -1, wait: 1 + k, run: 0, rx: 0, ry: 0, rad: KIND[kind][2] }); } };
   herd('camel', 'camels', 5, 130); herd('oryx', 'oryx', 4, 110);
@@ -630,15 +697,16 @@ const PROPS = [], DATES = [], CANS = [], ANIMALS = [];
 // ---------- state ----------
 let st = 'load', t = 0, W = 0, Hh = 0, zoom = 1, dpr = 1, rs = 1, camx = 0, camy = 0, shake = 0, noteT = 0, slow = 0, hudKey = '', miniTick = 0, edgeT = 0, hitT = 0;
 const car = {}, run = { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], fuel: 100, max: 100, over: 0, low: false, seen: {}, vis: [], live: false };
-const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700 }; // what the upgrades change, set at the start of a run
+const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700, hop: 1.15, cl: 0.6 }; // what the upgrades change, set at the start of a run
 const parts = [], floats = [], tracks = [[], [], [], []], keys = {}, joy = { on: false, hard: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 }; // tracks: two tyre marks, and two darker ones laid down while sliding
+const rings = []; let camZ = 1; // rings: circles of dust spreading on the sand; camZ: the view pulls back a little at speed and in the air
 let stallT = 0, hintT = 0; // stuck on a steep face with the engine pulling, and how long until the next hint about it
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // base values; see PH
    TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, HARD_R = 96, TIP = 0.4; // the pad: full throttle at JOY_R from where the finger went down; past HARD_R is pressing hard
 function resetCar() {
   Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0, pit: 0, rol: 0, spin: 0, rside: 1,
-    drift: false, dsc: 0, dyaw: 0, dT: 0, dsn: 0, dl: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0 });
-  for (const a of tracks) a.length = 0; parts.length = floats.length = 0; stallT = 0;
+    drift: false, dsc: 0, dyaw: 0, dT: 0, dsn: 0, dl: 0, boostT: 0, rampT: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0, rev: false, sx: 70, sy: 120, st: 0 });
+  for (const a of tracks) a.length = 0; parts.length = floats.length = rings.length = 0; stallT = 0; camZ = 1;
 }
 const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
 function resize() {
@@ -649,40 +717,63 @@ function resize() {
 }
 function note(text, cls, secs = 2.4) { const n = $('note'); n.textContent = text; n.className = cls || ''; n.hidden = false; noteT = secs; }
 function float(x, y, txt, col) { floats.push({ x, y, txt, col: col || '#fffaf0', life: 1.3 }); if (floats.length > 12) floats.shift(); }
-function puff(x, y, vx, vy, n, big) { for (let i = 0; i < n && parts.length < 110; i++) parts.push({ x: x + (Math.random() - 0.5) * 10, y: y + (Math.random() - 0.5) * 10, vx: vx + (Math.random() - 0.5) * 70, vy: vy + (Math.random() - 0.5) * 70, life: 0.5 + Math.random() * 0.4, r: (big ? 7 : 4) + Math.random() * 4 }); }
+// particles. c: 0 dust, 1 thrown wet sand, 2 smoke, 3 flame, 4 gold sparks (sparks fly out and shrink; the rest drift and swell)
+const PCOL = ['244,214,160', '168,112,66', '96,86,80', '255,150,50', '255,232,140'];
+function puff(x, y, vx, vy, n, big, c = 0) { for (let i = 0; i < n && parts.length < 150; i++) parts.push({ x: x + (Math.random() - 0.5) * 10, y: y + (Math.random() - 0.5) * 10, vx: vx + (Math.random() - 0.5) * 70, vy: vy + (Math.random() - 0.5) * 70, life: 0.5 + Math.random() * 0.4, r: (big ? 7 : 4) + Math.random() * 4, c }); }
+function spark(x, y, n, c = 4) { for (let i = 0; i < n && parts.length < 150; i++) { const a = Math.random() * TAU, v = 90 + Math.random() * 170; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.35 + Math.random() * 0.3, r: 3 + Math.random() * 3, c, s: 1 }); } }
+function ring(x, y, col, r = 16) { rings.push({ x, y, r, life: 1, col }); if (rings.length > 8) rings.shift(); }
 
 // ---------- missions, levels, races ----------
 // What keeps a run worth starting: three missions at a time (a new one replaces each finished one, harder as the
 // level rises), levels from experience, and timed races between places with bronze, silver and gold times.
 const UPS = ['engine', 'tyres', 'balance', 'tank', 'magnet'], UP_COST = [100, 250, 500, 900, 1500];
-const xpNeed = l => 80 + l * 45, RANKS = [1, 3, 6, 10, 15];
+const xpNeed = l => 70 + 50 * l + 5 * l * l, RANKS = [1, 3, 6, 10, 15];
+// what each level opens. The next one is always on show, on the results card and the missions sheet, so there is something to play for.
+const UNLOCKS = [[2, 'un_race'], [3, 't_pickup'], [4, 'un_slot'], [5, 'un_race'], [6, 't_buggy'], [7, 'un_grand'], [8, 'un_slot'], [10, 't_monster']];
+const nextUnlock = () => { const u = UNLOCKS.find(q => q[0] > save.lvl); return u ? T('unNext', u[0], T(u[1])) : ''; };
+function rankRow(top) { // rank, level, a bar of experience towards the next level
+  const mkEl = (tag, txt) => { const e = document.createElement(tag); if (txt !== undefined) e.textContent = txt; return e; }, bar = mkEl('div'), fill = mkEl('i'); bar.className = 'pbar'; fill.style.width = Math.round(save.xp / xpNeed(save.lvl) * 100) + '%'; bar.append(fill);
+  top.textContent = ''; top.append(mkEl('b', T('rank')[rankOf(save.lvl)]), mkEl('span', T('lv', save.lvl)), bar, mkEl('small', nf(save.xp) + ' / ' + nf(xpNeed(save.lvl))));
+}
 const CH_WIN = 3.2, CH_MAX = 5, CH_MIN = 15; // combo: seconds to land the next stunt, the top multiplier, and the smallest stunt that counts
 const rankOf = l => { let r = 0; for (let i = 0; i < RANKS.length; i++) if (l >= RANKS[i]) r = i; return r; };
-const dayKey = (d = new Date()) => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
 const fmtTime = s => Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60).toFixed(1);
 function addXP(n) {
   save.xp += Math.round(n);
-  while (save.xp >= xpNeed(save.lvl)) { save.xp -= xpNeed(save.lvl); save.lvl++; const c = 20 * save.lvl; save.coins += c; run.lvlUp = save.lvl; note(T('lvlUp', save.lvl, c), 'card', 3.2); play('zone', 1.2); }
+  while (save.xp >= xpNeed(save.lvl)) { save.xp -= xpNeed(save.lvl); save.lvl++; const c = 20 * save.lvl, un = UNLOCKS.find(q => q[0] === save.lvl); save.coins += c; run.lvlUp = save.lvl; note(T('lvlUp', save.lvl, c) + (un ? ' · ' + T('unNow', T(un[1])) : ''), 'card', 3.8); play('zone', 1.2);
+    if (run.live && !run.race && st === 'play') { run.fuel = Math.min(run.max, run.fuel + 20); run.low = false; spark(car.x, car.y - 60, 20); } } // a new level in the middle of a run tops up the tank
 }
 // Missions are dealt at random from the kinds below. Each kind has: its category, the level it first appears at, its target at
 // level 1, how much the target grows per level, a cap, a rounding step, and a prize weight. Three things make missions harder as the
 // level rises: targets grow, hard (three-star) missions get more likely, and from level 5 some must be done without rolling the car.
 // Categories: c collecting, d driving, s stunts, e exploring, r races, t adds up over several runs.
 const MK = {
-  dates: ['c', 1, 20, 5, 100, 5, 1], rush: ['c', 3, 10, 2, 36, 1, 1.3], cans: ['c', 2, 1, 0.34, 6, 1, 1], earn: ['c', 4, 15, 4, 110, 5, 1.2],
+  dates: ['c', 1, 20, 5, 100, 5, 1], rush: ['c', 3, 10, 2, 36, 1, 1.3], cans: ['c', 2, 1, 0.34, 6, 1, 1], earn: ['c', 4, 15, 4, 110, 5, 1.2], gold: ['c', 2, 1, 0.3, 5, 1, 1.4],
   dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 180, 15, 410, 10, 1],
   air: ['s', 1, 2.5, 0.5, 12, 0.5, 1.2], jump: ['s', 1, 0.6, 0.05, 1.6, 0.1, 1.2], drift: ['s', 1, 280, 80, 3000, 20, 1.2], bigdrift: ['s', 3, 120, 20, 500, 10, 1.3],
   donut: ['s', 3, 1, 0.3, 5, 1, 1.3], two: ['s', 2, 2, 0.4, 10, 0.5, 1.4], twohold: ['s', 4, 1, 0.12, 3, 0.1, 1.5], flip: ['s', 2, 1, 0.2, 4, 1, 1.5],
   spin: ['s', 2, 1, 0.25, 5, 1, 1.3], stunt: ['s', 1, 550, 150, 8000, 50, 1.2], combo: ['s', 2, 2, 0.34, CH_MAX, 1, 1.3],
+  ramp: ['s', 1, 2, 0.5, 10, 1, 1.1], hoop: ['s', 2, 1, 0.34, 6, 1, 1.4], boost: ['d', 1, 2, 0.5, 8, 1, 1],
   visit: ['e', 1, 2, 0.5, 8, 1, 1.2], goto: ['e', 1, 1, 0, 1, 1, 1], dash: ['e', 3, 1, 0, 1, 1, 1.4], deliver: ['e', 2, 2, 0, 2, 1, 1.5], summit: ['e', 3, 1, 0, 1, 1, 1.5], reem: ['e', 2, 3, 0.6, 10, 1, 1.2],
   race: ['r', 2, 1, 0, 1, 1, 1.3], medal: ['r', 3, 1, 0.2, 3, 1, 1.6],
   tdates: ['t', 2, 110, 30, 1e9, 10, 1.4], tdist: ['t', 2, 3600, 600, 1e9, 100, 1.4], tstunt: ['t', 3, 2500, 600, 1e9, 100, 1.4], tair: ['t', 3, 12, 2.5, 1e9, 1, 1.4], tvisit: ['t', 3, 8, 1.5, 1e9, 1, 1.4],
 };
 const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1, two: 1, twohold: 1 }; // how often each category is dealt; the kinds counted in tenths
 const slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
-function newMission(avoid) { // avoid: the kind being swapped away, which must not come straight back
-  const L = save.lvl, act = save.missions, catN = c => act.filter(m => MK[m.t][0] === c).length;
-  let pool = Object.keys(MK).filter(k => k !== avoid && MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
+// A mission can also be dealt in the middle of a run, to take the place of one just finished. It then counts from that moment: kinds that add
+// up (ADD) start from what the run has already done, and the others are only dealt if the run is still under half way to their target.
+const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal']);
+function newMission(avoid, live) { // avoid: the kind being swapped away, which must not come straight back
+  const L = save.lvl, act = save.missions.filter(m => !m.done), catN = c => act.filter(m => MK[m.t][0] === c).length, bad = live ? new Set(NOT_LIVE) : new Set();
+  for (let tries = 0; ; tries++) { const m = dealMission(avoid, bad, L, act, catN); if (!live) return m;
+    if (m.nr && run.rolls) delete m.nr; // a no-roll twist is no use in a run that has already rolled
+    const raw = mProg(m), left = { dates: DATES.filter(o => !o.off).length, cans: CANS.filter(o => !o.off).length, gold: GOLD.filter(o => !o.off).length, hoop: HOOPS.filter(o => !o.off).length, visit: SITES.length - Object.keys(run.seen).length, reem: ANIMALS.filter(a => a.kind === 'gazelle' && !a.seen).length }[m.t];
+    if (MK[m.t][0] === 't') m.p = -raw; else if (ADD.has(m.t)) { if (left !== undefined && left < m.n) { if (left < 1 || tries > 8) { bad.add(m.t); continue; } m.n = left; } m.o = raw; } else if (raw >= m.n * 0.5) { bad.add(m.t); continue; }
+    return m; }
+}
+function dealMission(avoid, bad, L, act, catN) {
+  let pool = Object.keys(MK).filter(k => k !== avoid && !bad.has(k) && MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
+  if (!pool.length) pool = ['dist', 'stunt', 'dates', 'air', 'drift', 'boost'].filter(k => !act.some(m => m.t === k)); if (!pool.length) pool = ['dist'];
   const fresh = pool.filter(k => !save.mrec.includes(k)); if (fresh.length >= 4) pool = fresh;                                         // not one you had a moment ago
   const cats = [...new Set(pool.map(k => MK[k][0]))], low = Math.min(...cats.map(catN)), want = cats.filter(c => catN(c) === low);      // spread across the categories
   let roll = Math.random() * want.reduce((sum, c) => sum + CAT_W[c], 0), cat = want[0]; for (const c of want) { roll -= CAT_W[c]; if (roll < 0) { cat = c; break; } }
@@ -699,12 +790,17 @@ function newMission(avoid) { // avoid: the kind being swapped away, which must n
   save.mrec.push(t); if (save.mrec.length > 8) save.mrec.shift(); return m;
 }
 function fillMissions(avoid) { save.missions = save.missions.filter(m => !m.done && MK[m.t]); while (save.missions.length < slots()) save.missions.push(newMission(avoid)); }
-function mProg(m) { // how far a mission has got, counting the run in progress
+function mProg(m) { const v = mRaw(m); return m.o ? Math.max(0, v - m.o) : v; }
+function mRaw(m) { // how far a mission has got, counting the run in progress
   const on = run.live; if (MK[m.t][0] !== 't' && (!on || (m.nr && run.rolls))) return 0; // after a roll, a no-roll mission starts again on the next run
   switch (m.t) {
     case 'dates': return run.dates;
     case 'rush': return run.d60;
     case 'cans': return run.cans;
+    case 'gold': return run.gold;
+    case 'ramp': return run.ramps;
+    case 'hoop': return run.hoops;
+    case 'boost': return run.boosts;
     case 'earn': return Math.floor(run.dates / 10) + Math.floor(run.dist / 2000) + Math.floor(run.stunt / 50);
     case 'dist': return run.dist / 8;
     case 'noroll': return run.noRoll / 8;
@@ -740,8 +836,25 @@ const mText = m => (m.t === 'deliver' ? T('m_deliver', T('s_' + m.a), T('s_' + m
 const mVal = (m, v) => DEC[m.t] ? v.toFixed(1) : nf(Math.floor(v));
 function checkMissions() {
   for (const m of save.missions) if (!m.done && mProg(m) >= m.n) {
-    m.done = 1; save.coins += m.rw; run.mdone++; run.mcoins += m.rw; addXP(m.xp); persist(); coinsUI(); play('zone'); note(T('mDone', mText(m), m.rw), 'card', 3.4);
+    m.done = 1; m.at = run.t; save.coins += m.rw; run.mdone++; run.mcoins += m.rw; addXP(m.xp); play('zone'); note(T('mDone', mText(m), m.rw), 'card', 3.4);
+    if (run.mdone % 3 === 0) { const b = 20 + 5 * save.lvl; save.coins += b; run.mcoins += b; float(car.x, car.y - 170, T('mTriple', run.mdone, b), '#bff0c0'); spark(car.x, car.y - 60, 18); } // every third mission in one run pays a bonus
+    persist(); coinsUI(); misHud(true);
   }
+  // a finished mission stays ticked on the screen for a moment, then a new one takes its place and counts from there
+  if (run.live && !run.race && st === 'play') for (let i = 0; i < save.missions.length; i++) { const m = save.missions[i]; if (m.done && run.t - m.at > 2.6) { save.missions[i] = newMission(m.t, true); save.missions[i].fresh = run.t; persist(); misHud(true); } }
+}
+// The three targets on the screen while driving: the first three missions, each with a bar that fills, a tick when it is done, then its replacement.
+let misKey = '';
+function misHud(force) {
+  const el = $('mis'); if (run.race) return;
+  const show3 = save.missions.slice(0, 3), key = show3.map(m => m.t + (m.done ? 'D' : '') + '|' + mVal(m, Math.min(m.n, mProg(m))) + '|' + m.n + (m.fresh && run.t - m.fresh < 2 ? 'F' : '')).join(';') + getLang();
+  if (!force && key === misKey) return; misKey = key;
+  while (el.children.length > show3.length) el.lastChild.remove();
+  show3.forEach((m, i) => { let row = el.children[i]; if (!row) { row = document.createElement('div'); row.append(document.createElement('i'), document.createElement('span'), document.createElement('b')); el.append(row); }
+    const v = Math.min(m.n, mProg(m)), cls = 'mi' + (m.done ? ' done' : '') + (m.fresh && run.t - m.fresh < 2 ? ' fresh' : ''); if (row.className !== cls) row.className = cls;
+    row.children[0].style.transform = `scaleX(${m.done ? 1 : clamp(v / m.n, 0, 1)})`; const tx = mText(m), val = m.done ? '✓' : mVal(m, v) + ' / ' + mVal(m, m.n);
+    if (row.children[1].textContent !== tx) row.children[1].textContent = tx; if (row.children[2].textContent !== val) row.children[2].textContent = val; });
+  el.hidden = !show3.length;
 }
 // races: drive through the places in order against the clock. The daily race changes every day.
 const RACES = [
@@ -784,7 +897,7 @@ function endDrift(clean) { // clean: the slide was driven out of, not ended by a
   if (!car.drift) return; car.drift = false;
   if (car.dsc > 20) { run.drift += car.dsc; if (car.dsc > run.maxDrift) run.maxDrift = car.dsc; stunt(car.dsc, T('st_drift'));
     if (clean && car.dsc > 45) { const b = Math.min(130, 35 + car.dsc * 0.3), cs = Math.cos(car.ang), sn = Math.sin(car.ang); // a good slide ends with a shove forward: the reason to drift, beyond the points
-      car.vx += cs * b; car.vy += sn * b; play('power', 1.5, 0.45); buzz(20); puff(car.x - cs * 40, car.y - sn * 40, -cs * 160, -sn * 160, 10, true); float(car.x, car.y - 100, T('st_boost'), '#bff0c0'); } }
+      car.vx += cs * b; car.vy += sn * b; car.boostT = 0.7; play('power', 1.5, 0.45); buzz(20); puff(car.x - cs * 40, car.y - sn * 40, -cs * 160, -sn * 160, 10, true); float(car.x, car.y - 100, T('st_boost'), '#bff0c0'); } }
   car.dsc = 0;
 }
 function endTwo() { if (car.twoT > run.maxTwo) run.maxTwo = car.twoT; if (car.twoT > 0.4) stunt(car.twoT * 70, T('st_two', car.twoT.toFixed(1))); car.twoT = 0; }
@@ -792,8 +905,15 @@ function startRoll(dx, dy) { // the car goes over and tumbles in the direction (
   endDrift(); car.twoT = 0;
   const m = Math.hypot(dx, dy) || 1; car.roll = 1; car.rollT = 0; car.rdx = dx / m; car.rdy = dy / m; car.rside = car.rdy * Math.cos(car.ang) - car.rdx * Math.sin(car.ang) < 0 ? -1 : 1; car.air = false; car.tip = 0; car.fp = car.fy = 0;
   if (run.chain > 1) float(car.x, car.y - 85, T('comboLost'), '#ffd9d0'); run.chain = 0;
-  run.rolls++; run.nr = 0; if (!run.race) run.fuel -= 4; shake = 12; buzz(120); play('smash'); puff(car.x, car.y, 0, 0, 14, true);
+  run.rolls++; run.nr = 0; if (!run.race) run.fuel -= 4; shake = 12; buzz(120); play('smash'); puff(car.x, car.y, 0, 0, 14, true); puff(car.x, car.y, 0, 0, 8, false, 1); spark(car.x, car.y - 20, 8, 3); ring(car.x, car.y, '#ffd9d0', 24);
   float(car.x, car.y - 40, T('rolled'), '#ffd9d0'); note(pick(T('baba')), 'baba', 2.6);
+}
+function rescue() { // move a trapped car to the nearest open, fairly level sand, looking behind it first
+  const e = 4, free = (x, y) => Math.hypot(x, y) < R - 70 && Math.hypot(H(x + e, y) - H(x - e, y), H(x, y + e) - H(x, y - e)) / (2 * e) < 0.4 && PROPS.every(p => !p.rad || Math.hypot(p.x - x, p.y - p.rad * 0.35 - y) > p.rad + 62) && ANIMALS.every(a => Math.hypot(a.x - x, a.y - y) > 70);
+  car.st = 0; car.sx = car.x; car.sy = car.y; run.tows = (run.tows || 0) + 1;
+  for (const d of [80, 120, 170, 230, 300, 400]) for (let k = 0; k < 12; k++) { const a = car.ang + Math.PI + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * TAU / 12, x = car.x + Math.cos(a) * d, y = car.y + Math.sin(a) * d; if (!free(x, y)) continue;
+    puff(car.x, car.y, 0, 0, 10, true); Object.assign(car, { x, y, sx: x, sy: y, vx: 0, vy: 0, z: H(x, y), gvz: 0, tip: 0, safe: 1.2, rev: false, ang: Math.atan2(y - car.y, x - car.x) }); endDrift();
+    puff(x, y, 0, 0, 10, true); play('whoosh', 0.8, 0.7); buzz(30); note(T('towed'), 'baba', 2.6); return; }
 }
 function update(dt) {
   if (run.cd > 0) { // race countdown: 3, 2, 1, go
@@ -807,16 +927,26 @@ function update(dt) {
     if (m > HARD_R * 1.3) { const k = HARD_R * 1.3 / m; joy.ox = joy.x - dx * k; joy.oy = joy.y - dy * k; dx *= k; dy *= k; m = HARD_R * 1.3; } // the pad follows a finger that has gone past its edge
     joy.hard = m > HARD_R * (joy.hard ? 0.86 : 1);                                                                                     // a little slack, so the edge of the ring does not flicker
     if (m > 8) { const d = wrap(Math.atan2(dy, dx) - car.ang); steer = clamp(d * 2.4, -1, 1); thr = clamp(m / JOY_R, 0.25, 1) * (Math.abs(d) > 2 ? 0.55 : 1);
-      if (joy.hard) { hb = car.drift || Math.abs(d) > 0.5;                                                                             // pressed hard into a sharp turn: the back steps out. Hard and straight ahead is just driving.
+      // The pad pulled back behind a car that is standing still or held by something: it backs out, swinging its nose round to the finger,
+      // then drives off. Without this a car nose-first against a tent or a palm could not leave: it only steers while it is rolling.
+      if (car.rev ? Math.abs(d) < 1.15 || car.air : Math.abs(d) > 2.1 && car.vx * Math.cos(car.ang) + car.vy * Math.sin(car.ang) < 40 && !car.air && !car.drift) { car.rev = !car.rev; car.revS = d < 0 ? -1 : 1; } // the side it swings to is chosen once, so a finger held dead behind cannot leave it backing in a straight line
+      if (car.rev) { thr = -1; steer = -car.revS; }
+      else if (joy.hard) { hb = car.drift || Math.abs(d) > 0.5;                                                                             // pressed hard into a sharp turn: the back steps out. Hard and straight ahead is just driving.
         const c0 = Math.cos(car.a0), s0 = Math.sin(car.a0), side = (dy * c0 - dx * s0) / m, fwd = (dx * c0 + dy * s0) / m;             // in the air, read against the way the jump is going:
         if (Math.abs(side) > 0.7) spinIn = Math.sign(side); else if (fwd < -0.5) flipIn = -1; } }                                      // hard across it is a spin, hard back is a backflip
-  } else { thr = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0); steer = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
+    else car.rev = false;
+  } else { car.rev = false; thr = (keys.ArrowUp || keys.KeyW ? 1 : 0) - (keys.ArrowDown || keys.KeyS ? 1 : 0); steer = (keys.ArrowRight || keys.KeyD ? 1 : 0) - (keys.ArrowLeft || keys.KeyA ? 1 : 0);
     hb = !!(keys.Space || keys.ShiftLeft || keys.ShiftRight); if (hb) { spinIn = steer; flipIn = steer ? 0 : thr < 0 ? -1 : 0; } if (keys.KeyF) flipIn = 1; } // keyboard: hold Space for a drift; in the air Space with left or right spins, Space with down is a backflip, F a front flip
   if (run.fuel <= 0) thr = 0;
   car.steer += (steer - car.steer) * Math.min(1, dt * 9); car.thr = thr; car.safe -= dt;
   car.x += car.vx * dt; car.y += car.vy * dt;
   const e = 3, h0 = H(car.x, car.y), gx = (H(car.x + e, car.y) - H(car.x - e, car.y)) / (2 * e), gy = (H(car.x, car.y + e) - H(car.x, car.y - e)) / (2 * e);
   let sp = Math.hypot(car.vx, car.vy); run.dist += sp * dt; run.nr += sp * dt; if (run.nr > run.noRoll) run.noRoll = run.nr;
+  // A ramp: crossed the right way, on the wheels or skimming just above the sand, it throws the car up. Faster in is higher out.
+  if ((car.rampT -= dt) <= 0 && !car.roll && car.z - h0 < 16) for (const o of RAMPS) { const dx = car.x - o.x, dy = car.y - o.y; if (dx > 60 || dx < -60 || dy > 60 || dy < -60) continue;
+    const al = dx * o.cs + dy * o.sn, vd = car.vx * o.cs + car.vy * o.sn; if (al < -14 || al > 40 || Math.abs(dy * o.cs - dx * o.sn) > 38 || vd < 120) continue;
+    if (!car.air) { car.air = true; car.airT = 0; endTwo(); car.a0 = car.ang; car.trick = null; car.fp = car.fy = 0; }
+    car.vz = clamp(100 + vd * 0.62, 180, 400) * PH.hop; car.z = Math.max(car.z, h0); car.rampT = 0.5; run.ramps++; play('whoosh', 1.25, 0.9); buzz(25); puff(car.x, car.y, 0, 0, 6, true); ring(car.x, car.y, '#fff1d6'); break; }
   if (car.roll) { // tumbling down the slope: no control until the buggy lands back on its wheels
     car.rollT += dt; const k = car.rollT / 1.15, f = Math.min(1, dt * 5), v = 200 * (1 - k * 0.8);
     car.vx += (car.rdx * v - car.vx) * f; car.vy += (car.rdy * v - car.vy) * f; car.z = h0;
@@ -836,8 +966,8 @@ function update(dt) {
       car.air = false; car.z = h0; car.gvz = gx * car.vx + gy * car.vy; car.fp = car.fy = 0; car.trick = null;
       if (car.drift && car.airT > 0.4) endDrift();
       if (car.airT > 0.32 || upside) {
-        shake = Math.min(9, 3 + car.airT * 5); play('hit', 0.8, 0.6); puff(car.x, car.y, car.vx * 0.2, car.vy * 0.2, 8, true); buzz(30);
-        if (upside || (car.safe <= 0 && ((Math.abs(l) > 0.5 * sp && sp > 150) || Math.abs(sl) > PH.tip + 0.04))) { if (gm > 0.08) startRoll(-gx, -gy); else startRoll(-sn * (l || 1), cs * (l || 1)); }
+        shake = Math.min(9, 3 + car.airT * 5); play('hit', 0.8, 0.6); puff(car.x, car.y, car.vx * 0.2, car.vy * 0.2, 8, true); buzz(30); ring(car.x, car.y, '#fff1d6', 22);
+        if (upside || (car.safe <= 0 && ((Math.abs(l) > 0.5 * sp && sp > 150) || Math.abs(sl) > PH.tip + 0.13))) { if (gm > 0.08) startRoll(-gx, -gy); else startRoll(-sn * (l || 1), cs * (l || 1)); }
         else { // a clean landing banks the jump and any tricks done in it
           run.air += car.airT; if (car.airT > run.maxAir) run.maxAir = car.airT;
           let pts = car.airT * 40, label = T('jump', car.airT.toFixed(1));
@@ -854,23 +984,25 @@ function update(dt) {
     // already sideways the less it turns in, so the nose stays ahead of the way it is going by about fifty degrees and most of the speed carries.
     const f0 = car.vx * cs + car.vy * sn, l0 = -car.vx * sn + car.vy * cs, slip = Math.atan2(Math.abs(l0), Math.abs(f0) + 1), deeper = car.steer * l0 < 0;
     const dmul = car.drift ? (1.3 + 0.9 * Math.max(0, 1 - car.dT / 0.3)) * (deeper ? 1 - 0.82 * sstep(0.45, 0.95, slip) : 1.15) : 1;
-    const yr = car.steer * TURN * clamp(f0 / 150, -1, 1) * dmul; // how fast the car is turning
+    let tf = clamp(f0 / 150, -1, 1); if (thr > 0.2 && tf > -0.05 && tf < 0.3) tf = 0.3; else if (thr < -0.2 && tf < 0.05 && tf > -0.3) tf = -0.3; // under power the wheels dig round even at a standstill, so a car held against something can turn away from it
+    const yr = car.steer * TURN * tf * dmul; // how fast the car is turning
     car.ang += yr * dt; cs = Math.cos(car.ang); sn = Math.sin(car.ang);
     let f = car.vx * cs + car.vy * sn, l = -car.vx * sn + car.vy * cs; const sf = gx * cs + gy * sn, sl = -gx * sn + gy * cs; car.sf = sf;
-    // Low gear: at a crawl the engine pulls much harder, so the steepest slip face slows the car right down but never traps it. From rest it pulls
-    // 2.4 × 350 = 840 against 700 per unit of slope plus the sand's 26, so it climbs a slope of 1.16; the steepest slip face outside Tal Moreeb is 1.10.
-    const low = 1 + 1.4 * clamp(1 - Math.abs(f) / 170, 0, 1) * sstep(0.1, 0.4, sf); // only when pointing uphill: on the level the car pulls away as it always has
-    const push = thr > 0 ? thr * PH.acc * low : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * 0.5) : 0;
+    // Climbing: pointing uphill the engine pulls 60% harder at any speed, so the car charges a dune and has speed left to fly off the crest,
+    // and at a crawl low gear adds as much again and more. From rest it pulls 3 × 350 = 1050 against 700 per unit of slope plus the sand's 26,
+    // so it climbs a slope of 1.46; the steepest slip face outside Tal Moreeb is 1.10. On the level the car pulls away as it always has.
+    const up = sstep(0.1, 0.4, sf), low = 1 + up * (PH.cl + 1.4 * clamp(1 - Math.abs(f) / 170, 0, 1));
+    const push = thr > 0 ? thr * PH.acc * low : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * (car.rev ? 0.8 : 0.5)) : 0;
     f += (push - GR * sf - DRAG * f) * dt; f -= clamp(f, -PH.rr * dt, PH.rr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
     l += -GR * sl * dt; l *= Math.exp(-(car.drift ? (want ? 1.05 + 3 * Math.max(0, slip - 0.85) : 3) : PH.grip) * dt); // the slope pulls sideways; the tyres only half hold in sand, hardly at all in a slide, and bite again once it is let go
     car.vx = cs * f - sn * l; car.vy = sn * f + cs * l; sp = Math.hypot(car.vx, car.vy);
     const gvz = gx * car.vx + gy * car.vy;
-    if ((car.gvz - gvz) / dt > GRAV * 0.75 && sp > 120) { car.air = true; car.vz = car.gvz; car.airT = 0; car.z = h0; play('whoosh', 1, 0.7); } // the ground drops away faster than gravity: take off
+    if ((car.gvz - gvz) / dt > GRAV * (0.75 + 0.9 * sstep(400, 560, sp)) && sp > 120) { car.air = true; car.vz = car.gvz; car.airT = 0; car.z = h0; play('whoosh', 1, 0.7); } // the ground drops away faster than gravity: take off. Boosted well past its own top speed the car holds the sand harder, or it would skim every swell with no steering.
     else car.z = h0;
     car.gvz = gvz;
     if (thr > 0.5 && sp < 35 && sf > 0.36) { stallT += dt; if (stallT > 0.9 && hintT <= 0) { hintT = 12; note(T('stall'), 'baba', 3.2); } } else stallT = 0; // stopped on a face too steep even for low gear (Tal Moreeb has them): Baba says how to get up it
     if (car.air) { endTwo(); car.a0 = car.ang; // a slide is not ended by taking off: a short hop over a crest carries it through
-      car.trick = null; car.fp = car.fy = 0; if (car.vz > 0) car.vz *= 1.15; }
+      car.trick = null; car.fp = car.fy = 0; if (car.vz > 0) car.vz *= PH.hop; }
     if (car.drift) { // points for how sideways and how fast; a full circle is a donut
       car.dsc += Math.atan2(Math.abs(l), Math.abs(f) + 1) * sp * dt * 0.3; car.dyaw += yr * dt;
       if (Math.abs(car.dyaw) > TAU) { car.dyaw -= Math.sign(car.dyaw) * TAU; car.dsc += 120; run.donuts++; float(car.x, car.y - 150, T('st_donut'), '#ffe07a'); }
@@ -885,6 +1017,7 @@ function update(dt) {
     else car.tip = Math.max(0, car.tip - dt * 1.3);
     if (car.tip > 0.3 && !car.roll && !car.air) { car.twoT += dt; run.two += dt; } else if (car.twoT > 0) endTwo(); // on two wheels
     if (!car.roll && !car.air) {
+      if (thr > 0.5 && (sf > 0.22 || Math.abs(f) < 70) && Math.random() < dt * 34) puff(car.x - cs * 40, car.y - sn * 40, -cs * (170 + sf * 200), -sn * (170 + sf * 200), 1, true, 1); // working hard, uphill or pulling away: the wheels throw a tail of sand
       if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06) * (car.drift ? 4 : 1)) puff(car.x - cs * 38 + (Math.random() - 0.5) * 50 * sn, car.y - sn * 38 - (Math.random() - 0.5) * 50 * cs, -car.vx * 0.25 - (car.drift ? sn * l * 0.5 : 0), -car.vy * 0.25 + (car.drift ? cs * l * 0.5 : 0), 1, car.drift); }
       car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 27 : -27, a = tracks[s]; const mx = car.x - cs * 34 - sn * w, my = car.y - sn * 34 + cs * w; a.push(mx, my); if (a.length > 520) a.splice(0, 2);
         const k = tracks[2 + s]; if (car.drift) { k.push(mx, my); if (k.length > 420) k.splice(0, 2); } else if (k.length && !isNaN(k[k.length - 1])) k.push(NaN, NaN); } }
@@ -896,6 +1029,10 @@ function update(dt) {
   const d = Math.hypot(car.x, car.y); run.t += dt; if (d > run.far) run.far = d; if (sp > run.maxSp) run.maxSp = sp; // for the missions: the clock, how far from the camp, top speed
   if (d > R - 30) { const k = (d - (R - 30)) * 5 * dt; car.vx -= car.x / d * k * 60; car.vy -= car.y / d * k * 60; if (d > R + 60) { car.x *= (R + 60) / d; car.y *= (R + 60) / d; } if (edgeT <= 0) { note(T('edge'), '', 2); edgeT = 4; } }
   edgeT -= dt; hitT -= dt; hintT -= dt;
+  if (car.boostT > 0) { car.boostT -= dt; if (!car.roll && Math.random() < dt * 60) { const cs = Math.cos(car.ang), sn = Math.sin(car.ang); puff(car.x - cs * 46, car.y - sn * 46 - (car.z - h0) * 0.7, -cs * 220, -sn * 220, 1, false, Math.random() < 0.6 ? 3 : 2); } } // flame and smoke from the exhaust
+  // the last resort: the engine has been pulling for a while and the car has not moved a car's length. Baba tows it to open sand close by.
+  if (Math.abs(thr) > 0.3 && !car.air && !car.roll) { if (Math.hypot(car.x - car.sx, car.y - car.sy) > 34) { car.sx = car.x; car.sy = car.y; car.st = 0; } else if ((car.st += dt) > 2.4) rescue(); }
+  else { car.sx = car.x; car.sy = car.y; car.st = 0; }
   // solid things: bump and slow down
   const bump = (o, oy) => { const dx = car.x - o.x, dy = car.y - (o.y - oy), rr = o.rad + 27, d2 = dx * dx + dy * dy; if (d2 >= rr * rr || car.air) return false;
     const dd = Math.sqrt(d2) || 1, nx = dx / dd, ny = dy / dd, vn2 = car.vx * nx + car.vy * ny; car.x += nx * (rr - dd); car.y += ny * (rr - dd);
@@ -914,13 +1051,18 @@ function update(dt) {
     if (dc < 60) bump(a, 8);
   }
   // pick-ups
-  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; play('date', 1 + (run.dates % 8) * 0.06); } }
+  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; play('date', 1 + (run.dates % 8) * 0.06); spark(o.x, o.y - 6, 3); } }
+  for (const o of GOLD) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick + 1200) { o.off = true; run.dates += 10; run.gold++; play('power', 1.6); buzz(30); float(o.x, o.y - 44, T('goldPlus'), '#ffe07a'); spark(o.x, o.y - 10, 16); ring(o.x, o.y, '#ffe07a'); } }
+  for (const o of PADS) { o.cd -= dt; if (o.cd > 0 || car.air || car.roll) continue; const dx = o.x - car.x, dy = o.y - car.y; // a boost strip: a shove the way its arrows point
+    if (dx * dx + dy * dy < 2600) { o.cd = 2; car.vx += o.cs * 240; car.vy += o.sn * 240; car.boostT = 1.4; run.boosts++; play('power', 1.4, 0.8); buzz(25); float(car.x, car.y - 100, T('st_boost'), '#bff0c0'); ring(o.x, o.y, '#bff0c0', 30); } }
+  if (car.air) for (const o of HOOPS) if (!o.off) { const dx = car.x - o.x, dy = car.y - o.y; if (dx > 70 || dx < -70 || dy > 70 || dy < -70) continue; // a hoop: flown through, off a ramp
+    if (Math.abs(dx * o.cs + dy * o.sn) < 30 && Math.abs(dy * o.cs - dx * o.sn) < 52 && car.z - h0 > 12) { o.off = true; run.hoops++; stunt(120, T('st_hoop')); play('zone', 1.5); buzz(30); spark(o.x, o.y - 84, 18); } }
   for (const o of CANS) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < 2200) { o.off = true; run.cans++; run.fuel = Math.min(run.max, run.fuel + 26); run.low = false; play('power'); float(o.x, o.y - 30, T('canPlus'), '#bff0c0'); } }
   let cur = '';
   for (const s of SITES) { const dx = s.x - car.x, dy = s.y - car.y, rr = reach(s); if (dx * dx + dy * dy >= rr * rr) continue; cur = s.id;
     if (!run.seen[s.id]) { run.seen[s.id] = 1; run.seenT[s.id] = run.t; if (!save.cards.includes(s.id)) { save.cards.push(s.id); save.coins += s.coins; run.cards.push(s.id); addXP(30); persist(); coinsUI(); play('zone'); note(T('found', T('s_' + s.id), s.coins), 'card', 3.2); } } }
   if (cur !== run.cur) { run.cur = cur; if (cur) { run.vis.push(cur); if (run.vis.length > 60) run.vis.shift(); } } // the order places were entered, for delivery missions
-  run.mt -= dt; if (run.mt <= 0) { run.mt = 0.3; checkMissions(); }
+  run.mt -= dt; if (run.mt <= 0) { run.mt = 0.25; checkMissions(); misHud(); }
   if (run.race) { // race: clock, ghost recording, next checkpoint. Fuel does not run down.
     run.rt += dt; run.recT -= dt; if (run.recT <= 0) { run.recT += 0.2; if (run.rec.length < 6000) run.rec.push(Math.round(car.x), Math.round(car.y), Math.round(car.ang * 100)); }
     const g = site(run.race.pts[run.ri]), dx = g.x - car.x, dy = g.y - car.y, rr = reach(g);
@@ -938,7 +1080,8 @@ function update(dt) {
   { const c3 = Math.cos(car.ang), s3 = Math.sin(car.ang); car.dl += ((car.drift ? clamp((-car.vx * s3 + car.vy * c3) / 500, -0.15, 0.15) : 0) - car.dl) * Math.min(1, dt * 8); } // the body leans out of a slide
   car.lean += ((car.air || car.roll ? 0 : car.tside * clamp((car.tip - 0.1) / 0.9, 0, 1) * 0.62) - car.lean) * Math.min(1, dt * 10); // one side lifts as the car tips
   car.spin += (car.vx * c2 + car.vy * s2) / (12.5 * CS) * dt;
-  const k = Math.min(1, dt * 4); camx += (car.x + car.vx * 0.3 - camx) * k; camy += (car.y + car.vy * 0.3 - camy) * k;
+  const k = Math.min(1, dt * 4); camx += (car.x + car.vx * 0.3 - camx) * k; camy += (car.y + car.vy * 0.3 - (car.z - h0) * 0.4 - camy) * k; // and up with a high jump, so the car stays in the picture
+  camZ += (1 - 0.1 * sstep(280, 520, sp) - 0.08 * clamp((car.z - h0) / 150, 0, 1) - camZ) * Math.min(1, dt * 2.2); // pull back at speed and on a big jump, so there is more to see ahead
   engine(sp, thr);
 }
 
@@ -951,7 +1094,7 @@ function drawCar(c) {
   c.fillStyle = 'rgba(60,30,15,' + (0.3 - Math.min(0.15, alt / 800)) + ')'; c.beginPath(); c.roundRect(-52, -33, 104, 66, 18); c.fill(); c.restore();
   const tumble = car.roll ? -car.rside * car.rollT / 1.15 * TAU * 2 : car.lean - car.dl + car.tip * 0.05 * Math.sin(t * 24);
   drawCar3D(c, car.x, car.y, 1, { ang: car.ang, pit: car.pit - car.fp, rol: car.rol + tumble, lift: alt + (car.roll ? 8 + Math.abs(Math.sin(tumble)) * 16 : Math.abs(Math.sin(car.lean)) * 34 + Math.abs(Math.sin(car.fp)) * 20), steer: car.steer, spin: car.spin,
-    speed: f, lat: l, t, air: car.air && car.airT > 0.12, mouth: car.air || car.roll || car.tip > 0.35 ? 'o' : '', col });
+    speed: f, lat: l, t, air: car.air && car.airT > 0.12, mouth: car.air || car.roll || car.tip > 0.35 ? 'o' : '', col, truck: save.truck });
   const live = car.drift && car.dsc > 12 ? T('st_drift') + ' ' + Math.round(car.dsc) : car.twoT > 0.25 ? T('st_two', car.twoT.toFixed(1)) : ''; // the stunt in progress, counted above the car
   if (live) { c.font = '800 22px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.lineWidth = 5; c.strokeStyle = INK; c.strokeText(live, car.x, car.y - 150); c.fillStyle = '#ffe07a'; c.fillText(live, car.x, car.y - 150); }
   if (run.live && run.chain > 0 && !car.roll) { // the combo: what the next stunt is multiplied by, and the time left to land it
@@ -960,6 +1103,29 @@ function drawCar(c) {
     c.fillStyle = INK; c.beginPath(); c.roundRect(car.x - 33, y + 6, 66, 9, 4.5); c.fill(); c.fillStyle = top ? '#ff8a3c' : '#ffe07a'; c.beginPath(); c.roundRect(car.x - 31, y + 8, 62 * clamp(run.chainT / CH_WIN, 0, 1), 5, 2.5); c.fill();
   }
   if (car.tip > 0.7 && !car.roll) { c.fillStyle = SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 4; c.font = '800 32px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.strokeText('!', car.x, car.y - 122); c.fillText('!', car.x, car.y - 122); }
+}
+function drawRamp(c, o) { // a wooden kicker: low at the back, 26 high at the lip, with arrows up it
+  const { x, y, cs, sn } = o, L0 = -54, L1 = 36, WD = 34, UP = 26, P = (al, ac, z) => [x + cs * al - sn * ac, y + sn * al + cs * ac - z], zz = al => UP * (al - L0) / (L1 - L0);
+  const poly = (pts, col) => { c.fillStyle = col; c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]); c.closePath(); c.fill(); if (col[0] === '#') c.stroke(); };
+  const a = P(L0, -WD, 0), b = P(L0, WD, 0), e = P(L1, WD, 0), d = P(L1, -WD, 0), e2 = P(L1, WD, UP), d2 = P(L1, -WD, UP), back = () => poly([d, e, e2, d2], '#6b4226');
+  c.lineJoin = 'round'; c.lineCap = 'round'; c.strokeStyle = INK; c.lineWidth = 2;
+  poly([a, b, e, d].map(q => [q[0] + 7, q[1] + 9]), 'rgba(60,30,15,.22)');
+  if (cs > 0) poly([a, d, d2], '#8a5a34'); else poly([b, e, e2], '#8a5a34');  // the side facing away
+  if (sn <= 0) back();
+  poly([a, b, e2, d2], '#d19a5c');
+  c.strokeStyle = 'rgba(43,26,18,.35)'; c.lineWidth = 1.4; c.beginPath(); for (let k = 1; k < 5; k++) { const al = L0 + (L1 - L0) * k / 5, p = P(al, -WD, zz(al)), q = P(al, WD, zz(al)); c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]); } c.stroke();
+  for (const al of [-30, 0]) { const p = P(al - 9, -17, zz(al - 9)), q = P(al + 9, 0, zz(al + 9)), r2 = P(al - 9, 17, zz(al - 9)); c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]); c.lineTo(r2[0], r2[1]); c.strokeStyle = INK; c.lineWidth = 9; c.stroke(); c.strokeStyle = '#fffaf0'; c.lineWidth = 5; c.stroke(); }
+  c.strokeStyle = INK; c.lineWidth = 2;
+  if (cs > 0) poly([b, e, e2], '#a8713f'); else poly([a, d, d2], '#a8713f');   // the side facing the viewer
+  if (sn > 0) back();
+}
+function drawHoop(c, o) { // a ring on two posts, set across the line of a ramp; it fades once flown through
+  const { x, y, cs, sn } = o, r = 50, hc = 84, ux = -sn, uy = cs, GA = c.globalAlpha; if (o.off) c.globalAlpha = GA * 0.3;
+  c.fillStyle = 'rgba(60,30,15,.2)'; c.beginPath(); c.ellipse(x + 4, y + 3, 8 + Math.abs(ux) * r, 6 + Math.abs(uy) * r * 0.5, 0, 0, TAU); c.fill();
+  c.lineCap = 'round'; for (const sg of [-1, 1]) { const px = x + ux * r * sg, py = y + uy * r * sg; c.strokeStyle = INK; c.lineWidth = 7; c.beginPath(); c.moveTo(px, py); c.lineTo(px, py - hc); c.stroke(); c.strokeStyle = '#8a817a'; c.lineWidth = 4; c.stroke(); }
+  const loop = () => { c.beginPath(); for (let i = 0; i <= 28; i++) { const an = i / 28 * TAU, px = x + ux * r * Math.cos(an), py = y + uy * r * Math.cos(an) - hc - r * 0.82 * Math.sin(an); if (i) c.lineTo(px, py); else c.moveTo(px, py); } };
+  loop(); c.strokeStyle = INK; c.lineWidth = 13; c.stroke(); c.strokeStyle = o.off ? '#8a817a' : SHEMAGH; c.lineWidth = 9; c.stroke();
+  c.strokeStyle = '#fffaf0'; c.setLineDash([14, 18]); c.lineDashOffset = -t * 30; c.lineCap = 'butt'; c.stroke(); c.setLineDash([]); c.lineCap = 'round'; c.globalAlpha = GA;
 }
 function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under everything else
   let s = site('oasis');
@@ -975,6 +1141,11 @@ function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under 
       c.moveTo(x, y); c.lineTo(x + Math.cos(b) * 26, y + Math.sin(b) * 26); c.lineTo(x + Math.cos(b) * 26 + Math.cos(b + 1.1) * 20, y + Math.sin(b) * 26 + Math.sin(b + 1.1) * 20); c.moveTo(x, y); c.lineTo(x + Math.cos(b + 2.2) * 22, y + Math.sin(b + 2.2) * 22); }
     c.stroke();
   }
+  for (const o of PADS) if (o.x > x0 - 80 && o.x < x1 + 80 && o.y > y0 - 80 && o.y < y1 + 80) { // boost strips: arrows that run along the sand
+    c.save(); c.translate(o.x, o.y); c.rotate(o.a); c.fillStyle = 'rgba(43,26,18,.3)'; c.beginPath(); c.roundRect(-52, -34, 104, 68, 14); c.fill(); c.lineJoin = 'round'; c.lineCap = 'round';
+    for (let i = 0; i < 3; i++) { const k = 0.5 + 0.5 * Math.sin(t * 9 - i * 1.3), x = -30 + i * 26; c.beginPath(); c.moveTo(x - 10, -22); c.lineTo(x + 10, 0); c.lineTo(x - 10, 22);
+      c.strokeStyle = INK; c.lineWidth = 12; c.stroke(); c.strokeStyle = `rgb(255,${150 + 90 * k | 0},${60 + 120 * k | 0})`; c.lineWidth = 7; c.stroke(); }
+    c.restore(); }
   s = site('camp');
   if (s.x > x0 - 200 && s.x < x1 + 200 && s.y > y0 - 200 && s.y < y1 + 200) { // the sadu rug in front of the tent
     c.save(); c.translate(s.x, s.y - 20); c.fillStyle = SHEMAGH; c.strokeStyle = INK; c.lineWidth = 1.6; c.beginPath(); c.roundRect(-56, -22, 112, 44, 4); c.fill(); c.stroke();
@@ -985,8 +1156,9 @@ function render(dt) {
   const c = ctx; bakeBudget = st === 'play' ? 2 : 3;
   let shx = 0, shy = 0; if (shake > 0.2) { shx = (Math.random() - 0.5) * shake * dpr; shy = (Math.random() - 0.5) * shake * dpr; shake *= Math.pow(0.02, dt); }
   c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#e3ad68'; c.fillRect(0, 0, W, Hh);
-  c.setTransform(zoom, 0, 0, zoom, W / 2 - camx * zoom + shx, Hh / 2 - camy * zoom + shy);
-  const hw = W / 2 / zoom + 8, hh = Hh / 2 / zoom + 8, x0 = camx - hw, x1 = camx + hw, y0 = camy - hh, y1 = camy + hh;
+  const zm = zoom * camZ;
+  c.setTransform(zm, 0, 0, zm, W / 2 - camx * zm + shx, Hh / 2 - camy * zm + shy);
+  const hw = W / 2 / zm + 8, hh = Hh / 2 / zm + 8, x0 = camx - hw, x1 = camx + hw, y0 = camy - hh, y1 = camy + hh;
   for (let iy = Math.floor(y0 / TS); iy <= Math.floor(y1 / TS); iy++) for (let ix = Math.floor(x0 / TS); ix <= Math.floor(x1 / TS); ix++) { const tl = tile(ix, iy); if (tl) c.drawImage(tl, ix * TS, iy * TS, TS + 0.6, TS + 0.6); }
   decals(c, x0, y0, x1, y1);
   const racing = run.race && (st === 'play' || st === 'pause') && run.ri < run.race.pts.length, goal = racing ? site(run.race.pts[run.ri]) : null;
@@ -999,28 +1171,40 @@ function render(dt) {
   marks(tracks[0]); marks(tracks[1]); c.stroke();
   c.strokeStyle = 'rgba(96,48,24,.34)'; c.lineWidth = 13; c.beginPath(); marks(tracks[2]); marks(tracks[3]); c.stroke(); // where the car slid, the sand is ploughed deeper
   const inView = (x, y, m) => x > x0 - m && x < x1 + m && y > y0 - m && y < y1 + m;
+  for (let i = rings.length - 1; i >= 0; i--) { const q = rings[i]; q.life -= dt * 1.7; if (q.life <= 0) { rings.splice(i, 1); continue; } c.globalAlpha = q.life * 0.75; c.strokeStyle = q.col; c.lineWidth = 2 + q.life * 5; c.beginPath(); c.ellipse(q.x, q.y, q.r + (1 - q.life) * 70, (q.r + (1 - q.life) * 70) * 0.8, 0, 0, TAU); c.stroke(); }
+  c.globalAlpha = 1;
   if (st !== 'menu' && st !== 'load') {
     const eD = spr('date'), eC = spr('can'); c.fillStyle = 'rgba(60,30,15,.2)';
     for (let i = 0; i < DATES.length; i++) { const o = DATES[i]; if (o.off || !inView(o.x, o.y, 20)) continue; c.beginPath(); c.ellipse(o.x + 2, o.y + 8, 6, 2.5, 0, 0, TAU); c.fill(); blit(c, eD, o.x, o.y - 5 - Math.sin(t * 3 + i) * 2.5); }
     for (let i = 0; i < CANS.length; i++) { const o = CANS[i]; if (o.off || !inView(o.x, o.y, 30)) continue; c.beginPath(); c.ellipse(o.x + 2, o.y + 3, 12, 4, 0, 0, TAU); c.fill(); blit(c, eC, o.x, o.y - 3 - Math.sin(t * 2.4 + i) * 3); }
+    for (let i = 0; i < GOLD.length; i++) { const o = GOLD[i]; if (o.off || !inView(o.x, o.y, 60)) continue; const by = o.y - 12 - Math.sin(t * 2.6 + i) * 4, pu = 0.5 + 0.5 * Math.sin(t * 5 + i); // a golden date, glowing
+      c.fillStyle = 'rgba(60,30,15,.2)'; c.beginPath(); c.ellipse(o.x + 2, o.y + 8, 12, 4.5, 0, 0, TAU); c.fill();
+      c.fillStyle = `rgba(255,214,70,${0.28 + 0.2 * pu})`; c.beginPath(); c.arc(o.x, by, 22 + pu * 6, 0, TAU); c.fill();
+      c.save(); c.translate(o.x, by); c.scale(1.9, 1.9); c.drawImage(eD.c, eD.x, eD.y, eD.w, eD.h); c.restore();
+      c.fillStyle = 'rgba(255,214,70,.55)'; c.beginPath(); c.ellipse(o.x, by, 9, 14, 0.25, 0, TAU); c.fill();
+      c.strokeStyle = '#fffaf0'; c.lineWidth = 2; c.beginPath(); const sx = o.x + 12, sy = by - 14, sr = 4 + pu * 5; c.moveTo(sx - sr, sy); c.lineTo(sx + sr, sy); c.moveTo(sx, sy - sr); c.lineTo(sx, sy + sr); c.stroke(); c.fillStyle = 'rgba(60,30,15,.2)'; }
   }
   // standing things and the buggy, sorted so nearer ones overlap farther ones
   draws.length = 0;
   for (const p of PROPS) if (!p.hide && inView(p.x, p.y, 130)) draws.push(p);
   for (const a of ANIMALS) if (inView(a.x, a.y, 90)) draws.push(a);
+  for (const o of RAMPS) if (inView(o.x, o.y, 90)) draws.push(o); for (const o of HOOPS) if (inView(o.x, o.y, 150)) draws.push(o);
   if (racing && run.ghost && run.cd <= 0) { // the ghost of your best run in this race
     const g = run.ghost, u = run.rt / 0.2, i = Math.floor(u) * 3, f = u % 1;
     if (i + 5 < g.length) { c.globalAlpha = 0.34; drawCar3D(c, g[i] + (g[i + 3] - g[i]) * f, g[i + 1] + (g[i + 4] - g[i + 1]) * f, 1, { ang: g[i + 2] / 100 + wrap((g[i + 5] - g[i + 2]) / 100) * f, speed: 200, spin: t * 8, t, col: COLORS.black }); c.globalAlpha = 1; }
   }
-  draws.push(car); draws.sort((a, b) => a.y - b.y);
+  draws.push(car); draws.sort((a, b) => (a.kind === 'ramp' ? a.y - 44 : a.y) - (b.kind === 'ramp' ? b.y - 44 : b.y)); // a ramp lies flat, so anything on it is drawn over it
   for (const o of draws) {
-    if (o === car) { drawCar(c); continue; }
+    if (o === car) { drawCar(c); continue; } if (o.kind === 'ramp') { drawRamp(c, o); continue; } if (o.kind === 'hoop') { drawHoop(c, o); continue; }
     const e = o.hx !== undefined ? spr(o.kind, (o.ph | 0) % 4) : spr(o.kind);
     c.fillStyle = 'rgba(60,30,15,.2)'; c.beginPath(); c.ellipse(o.x + e.w * 0.06, o.y + 1, e.w * 0.34, Math.min(9, e.w * 0.08), 0, 0, TAU); c.fill();
     blit(c, e, o.x, o.y, o.hx !== undefined ? o.dir < 0 : o.flip);
   }
   for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i, 1); continue; } p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94;
-    c.fillStyle = 'rgba(244,214,160,' + Math.min(0.6, p.life) + ')'; c.beginPath(); c.arc(p.x, p.y, p.r * (1.4 - p.life), 0, TAU); c.fill(); }
+    c.fillStyle = 'rgba(' + PCOL[p.c || 0] + ',' + Math.min(p.s ? 1 : 0.6, p.life * (p.s ? 3 : 1)) + ')'; c.beginPath(); c.arc(p.x, p.y, p.s ? p.r * Math.min(1, p.life * 2.5) : p.r * (1.4 - p.life), 0, TAU); c.fill(); }
+  if (st === 'play' && (car.boostT > 0 || Math.hypot(car.vx, car.vy) > 440)) { // streaks of air past the car when it is really moving
+    const v = Math.hypot(car.vx, car.vy) || 1, ux = car.vx / v, uy = car.vy / v; c.strokeStyle = 'rgba(255,250,240,.22)'; c.lineWidth = 3; c.beginPath();
+    for (let i = 0; i < 7; i++) { const px = camx + (Math.random() - 0.5) * hw * 1.8, py = camy + (Math.random() - 0.5) * hh * 1.8, l = 50 + Math.random() * 90; c.moveTo(px, py); c.lineTo(px - ux * l, py - uy * l); } c.stroke(); }
   c.font = '800 20px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = INK;
   for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.life -= dt; if (f.life <= 0) { floats.splice(i, 1); continue; } f.y -= 26 * dt; c.globalAlpha = Math.min(1, f.life * 2); c.strokeText(f.txt, f.x, f.y); c.fillStyle = f.col; c.fillText(f.txt, f.x, f.y); }
   c.globalAlpha = 1;
@@ -1041,7 +1225,9 @@ function drawMap(cnv, big) {
   const g = cnv.getContext('2d'), S = cnv.width, k = S / (2 * R * 1.04), u = S / 264, px = x => S / 2 + x * k;
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S); g.imageSmoothingEnabled = true; g.drawImage(miniBase, 0, 0, S, S);
   g.strokeStyle = INK; g.lineWidth = 2 * u; g.beginPath(); g.arc(S / 2, S / 2, R * k, 0, TAU); g.stroke();
-  if (st === 'play' || st === 'pause') { g.fillStyle = SHEMAGH; for (const o of CANS) if (!o.off) { g.beginPath(); g.arc(px(o.x), px(o.y), 2.6 * u, 0, TAU); g.fill(); } }
+  if (big) { g.fillStyle = '#fffaf0'; g.strokeStyle = INK; g.lineWidth = u; for (const o of RAMPS) { g.save(); g.translate(px(o.x), px(o.y)); g.rotate(o.a); g.beginPath(); g.moveTo(4.5 * u, 0); g.lineTo(-3 * u, -3.4 * u); g.lineTo(-3 * u, 3.4 * u); g.closePath(); g.fill(); g.stroke(); g.restore(); } } // ramps, pointing the way they throw
+  if (st === 'play' || st === 'pause') { g.fillStyle = SHEMAGH; for (const o of CANS) if (!o.off) { g.beginPath(); g.arc(px(o.x), px(o.y), 2.6 * u, 0, TAU); g.fill(); }
+    g.fillStyle = '#ffd23c'; g.strokeStyle = INK; g.lineWidth = u; for (const o of GOLD) if (!o.off) { g.beginPath(); g.arc(px(o.x), px(o.y), 3.1 * u, 0, TAU); g.fill(); g.stroke(); } }
   g.font = `800 ${Math.round(big ? 9 * u : 10 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
   SITES.forEach((s, i) => { const on = save.cards.includes(s.id), r = (big ? 7 : 5.5) * u;
     g.fillStyle = on ? '#1f7a74' : '#d9b57f'; g.strokeStyle = INK; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(px(s.x), px(s.y), r, 0, TAU); g.fill(); g.stroke();
@@ -1058,9 +1244,6 @@ function hud() { // only touch the page when a value changes
   const m = Math.round(run.dist / 8), f = Math.round(run.fuel / run.max * 100), key = m + '|' + f + '|' + run.dates; if (key === hudKey) return; hudKey = key;
   $('mDist').textContent = nf(m); $('mDates').textContent = nf(run.dates);
   $('fuelFill').style.transform = `scaleX(${f / 100})`; $('bar').classList.toggle('danger', f < 20);
-  let ms = null, lead = -1; for (const q of save.missions) if (!q.done) { const k = mProg(q) / q.n; if (k > lead) { lead = k; ms = q; } } // the mission you are closest to finishing, with its progress
-  const el = $('mis');
-  if (ms) { const tx = mText(ms) + ' · ' + mVal(ms, Math.min(ms.n, mProg(ms))) + ' / ' + mVal(ms, ms.n); if (el.textContent !== tx) el.textContent = tx; } el.hidden = !ms;
 }
 // ---------- the loop ----------
 let last = 0, avPh = 0;
@@ -1087,19 +1270,20 @@ function coinsUI() { document.querySelectorAll('.coinVal').forEach(e => { e.text
 const ICON_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>', ICON_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zM17 9.5l5 5M22 9.5l-5 5"/></svg>';
 function muteUI() { $('menuMute').innerHTML = save.muted ? ICON_OFF : ICON_ON; $('menuMute').setAttribute('aria-pressed', save.muted); $('mute').textContent = save.muted ? '×' : '♪'; if (master) master.gain.value = save.muted ? 0 : 1; }
 function toggleMute() { save.muted = !save.muted; persist(); unlockAudio(); muteUI(); }
+function resetWorld() { for (const a of [DATES, CANS, GOLD, HOOPS]) for (const o of a) o.off = false; for (const o of PADS) o.cd = 0; }
 function showMenu() {
-  st = 'menu'; resetCar(); for (const o of DATES) o.off = false; for (const o of CANS) o.off = false;
-  ['hud', 'miniBtn', 'pauseBtn', 'mute', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
+  st = 'menu'; resetCar(); resetWorld();
+  ['hud', 'mis', 'miniBtn', 'pauseBtn', 'mute', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
   const b = $('menuBest'); b.hidden = !save.best; b.textContent = T('best', save.best); releaseWake();
 }
 function startRun(rc) { // rc: a race to drive, or nothing for a free safari
-  unlockAudio(); st = 'play'; resetCar(); for (const o of DATES) o.off = false; for (const o of CANS) o.off = false;
-  const u = save.up; Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine), grip: GRIP + 0.45 * u.tyres, rr: RR - 2.5 * u.tyres, tip: TIP + 0.022 * u.balance, pick: (41 + 13 * u.magnet) ** 2 });
-  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
+  unlockAudio(); st = 'play'; resetCar(); resetWorld();
+  const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl });
+  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
   $('distLbl').textContent = rc ? '' : T('m'); $('dateLbl').textContent = rc ? T('cp') : T('dates'); show('fuelBox', !rc);
-  const mi = $('mis'); mi.hidden = !rc; if (rc) mi.textContent = T('raceHud', T('r_' + rc.id), fmtTime(raceTargets(rc)[2]));
+  const mi = $('mis'); mi.textContent = ''; misKey = ''; mi.hidden = !rc; mi.classList.toggle('race', !!rc); if (rc) mi.textContent = T('raceHud', T('r_' + rc.id), fmtTime(raceTargets(rc)[2])); else { for (const q of save.missions) { delete q.o; delete q.fresh; } misHud(true); }
   camx = car.x; camy = car.y; hudKey = ''; joy.on = joy.hard = false; hintT = 0; for (const k in keys) keys[k] = 0;
   ['menu', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); ['hud', 'miniBtn', 'pauseBtn', 'mute'].forEach(id => show(id, true));
   for (const a of ANIMALS) a.seen = 0;
@@ -1110,11 +1294,11 @@ function resume() { if (st !== 'pause') return; unlockAudio(); st = 'play'; show
 async function endRun(early) {
   if (st !== 'play' && st !== 'pause') return;
   const dn = run.done, raced = !!run.race;
-  st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
+  st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'mis', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
   const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
   run.newBest = !raced && m > save.best; if (run.newBest) save.best = m; save.coins += total;
   endDrift(); endTwo(); checkMissions(); addXP(m / 40 + run.dates / 2 + run.stunt / 25);
-  for (const q of save.missions) if (!q.done && MK[q.t][0] === 't') q.p = Math.min(q.n, mProg(q)); // missions that add up over several runs keep their progress
+  for (const q of save.missions) { if (!q.done && MK[q.t][0] === 't') q.p = Math.min(q.n, mProg(q)); delete q.o; delete q.fresh; } // missions that add up over several runs keep their progress; the rest start again next run
   run.live = false; fillMissions(); persist();
   // ads hook, the same one the other Abood games offer: the results card waits for it, for 15 seconds at most
   try { if (typeof window.aboodAfterRun === 'function') await Promise.race([window.aboodAfterRun({ distance: m, dates: run.dates }), new Promise(r => setTimeout(r, 15000))]); } catch (e) {}
@@ -1125,6 +1309,7 @@ async function endRun(early) {
   $('swPartS').textContent = T('partS', run.dates, cS); $('swPartD').textContent = T('partD', m, cD); $('swPartA').textContent = T('partA', run.stunt, cA);
   const extra = []; if (dn && dn.gain) extra.push(T('overMedal', dn.gain)); if (dn && dn.isBest) extra.push(T('overBestTime')); if (run.mdone) extra.push(T('overMis', run.mdone, run.mcoins)); if (run.combo > 1) extra.push(T('overCombo', run.combo)); if (run.lvlUp) extra.push(T('overLvl', run.lvlUp));
   if (run.cards.length) extra.push(T('overCards', run.cards.map(id => T('s_' + id)).join(getLang() === 'ar' ? '، ' : ', ')));
+  rankRow($('overRank')); if (nextUnlock()) extra.push(nextUnlock());
   const oc = $('overCards'); oc.hidden = !extra.length; oc.textContent = extra.join(' · ');
   const ic = $('swDateIc').getContext('2d'); ic.setTransform(1, 0, 0, 1, 0, 0); ic.clearRect(0, 0, 64, 64); ic.setTransform(2.6, 0, 0, 2.6, 32, 34); aDate(ic);
   coinsUI(); show('over', true);
@@ -1150,10 +1335,17 @@ function openSheet(id) {
     for (const s of SITES) { const on = save.cards.includes(s.id), card = el('div', 'card' + (on ? '' : ' locked')), cn = mk(192, 192); siteIcon(cn, s.id); card.append(cn, el('b', '', on ? T('s_' + s.id) : T('unknown')), el('small', '', `+${s.coins}`)); grid.append(card); }
     body.append(grid);
   } else if (id === 'garage') {
-    body.append(el('p', 'label', T('garageNote'))); const grid = el('div', 'cards');
+    body.append(el('p', 'label', T('garageNote')), el('p', 'label', T('trTitle'))); const tg = el('div', 'cards'), mineT = COLORS[save.color] || COLORS.white;
+    for (const [tid, tk] of Object.entries(TRUCKS)) { // four trucks, opened by level and then bought
+      const own = save.trucks.includes(tid), on = save.truck === tid, locked = !own && save.lvl < tk.lvl, card = el('div', 'card' + (on ? ' on' : '') + (locked ? ' locked' : '')), cn = mk(192, 192), g = cn.getContext('2d');
+      g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); drawCar3D(g, 94, 160, tid === 'monster' ? 1.02 : 1.12, { ang: 0.95, steer: 0.5, speed: 90, t: 1, col: mineT, truck: tid });
+      const btn = el('button', on || own ? 'sec' : '', on ? T('using') : own ? T('use') : locked ? T('locked', tk.lvl) : T('buy', tk.cost)); btn.type = 'button'; btn.disabled = on || locked;
+      btn.onclick = () => { if (!own) { if (save.coins < tk.cost) return note(T('notEnough')); save.coins -= tk.cost; save.trucks.push(tid); note(T('bought')); play('power'); } save.truck = tid; persist(); coinsUI(); openSheet('garage'); };
+      card.append(cn, el('b', '', T('t_' + tid)), el('small', '', T('td_' + tid)), btn); tg.append(card); }
+    body.append(tg, el('p', 'label', T('colTitle'))); const grid = el('div', 'cards');
     for (const [cid, col] of Object.entries(COLORS)) {
       const own = save.colors.includes(cid), on = save.color === cid, card = el('div', 'card' + (on ? ' on' : '')), cn = mk(192, 192), g = cn.getContext('2d');
-      g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); drawCar3D(g, 92, 158, 1.18, { ang: 0.95, steer: 0.5, speed: 90, t: 1, col });
+      g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); drawCar3D(g, 92, 158, 1.18, { ang: 0.95, steer: 0.5, speed: 90, t: 1, col, truck: save.truck });
       const btn = el('button', on || own ? 'sec' : '', on ? T('using') : own ? T('use') : T('buy', col.cost)); btn.type = 'button'; btn.disabled = on;
       btn.onclick = () => { if (!own) { if (save.coins < col.cost) return note(T('notEnough')); save.coins -= col.cost; save.colors.push(cid); note(T('bought')); play('power'); } save.color = cid; persist(); coinsUI(); openSheet('garage'); };
       card.append(cn, el('b', '', T('c_' + cid)), el('small', '', col.cost ? nf(col.cost) : T('free')), btn); grid.append(card);
@@ -1163,7 +1355,7 @@ function openSheet(id) {
       const lv = save.up[uid], card = el('div', 'card'), cn = mk(192, 192), g = cn.getContext('2d'); g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192);
       if (uid === 'tank') { g.setTransform(5, 0, 0, 5, 96, 168); aCan(g); }
       else if (uid === 'magnet') { for (const [x, y, k] of [[60, 120, 4], [112, 86, 5.5], [140, 140, 3.4]]) { g.setTransform(k, 0, 0, k, x, y); aDate(g); } }
-      else drawCar3D(g, 92, 158, 1.18, uid === 'engine' ? { ang: 0.25, speed: 320, t: 1, col: mine } : uid === 'tyres' ? { ang: 1.25, steer: 1, speed: 60, t: 1, col: mine } : { ang: 0.6, rol: 0.42, speed: 60, t: 1, col: mine });
+      else drawCar3D(g, 92, 158, 1.18, Object.assign({ t: 1, col: mine, truck: save.truck }, uid === 'engine' ? { ang: 0.25, speed: 320 } : uid === 'tyres' ? { ang: 1.25, steer: 1, speed: 60 } : { ang: 0.6, rol: 0.42, speed: 60 }));
       const maxed = lv >= 5, btn = el('button', '', maxed ? T('upMax') : T('buy', UP_COST[lv])); btn.type = 'button'; btn.disabled = maxed;
       btn.onclick = () => { const cost = UP_COST[save.up[uid]]; if (save.coins < cost) return note(T('notEnough')); save.coins -= cost; save.up[uid]++; persist(); coinsUI(); note(T('bought')); play('power'); openSheet('garage'); };
       const pips = el('span', 'pips'); for (let i = 0; i < 5; i++) pips.append(el('i', i < lv ? 'on' : ''));
@@ -1175,8 +1367,7 @@ function openSheet(id) {
     SITES.forEach((s, i) => { const on = save.cards.includes(s.id), li = el('li', on ? '' : 'off'); li.append(el('i', '', String(i + 1)), el('span', '', on ? T('s_' + s.id) : T('unknown'))); ul.append(li); });
     const side = el('div', 'menu-text'); side.append(el('p', 'label', T('mapNote')), ul); wrap2.append(cn, side); body.append(wrap2);
   } else if (id === 'missions') {
-    const top = el('div', 'rank'), bar = el('div', 'pbar'), fill = el('i'); fill.style.width = Math.round(save.xp / xpNeed(save.lvl) * 100) + '%'; bar.append(fill);
-    top.append(el('b', '', T('rank')[rankOf(save.lvl)]), el('span', '', T('lv', save.lvl)), bar, el('small', '', nf(save.xp) + ' / ' + nf(xpNeed(save.lvl)))); body.append(top);
+    const top = el('div', 'rank'); rankRow(top); body.append(top); if (nextUnlock()) body.append(el('p', 'hint', nextUnlock()));
     for (const m of save.missions) { const row = el('div', 'mrow' + (m.done ? ' done' : '')), v = Math.min(m.n, mProg(m)), pb = el('div', 'pbar'), pf = el('i'), ttl = el('b'); pf.style.width = Math.round(v / m.n * 100) + '%'; pb.append(pf);
       ttl.append(el('span', 'stars', '★'.repeat(m.d || 2)), ' ' + mText(m));
       const rw = el('span', 'rw'); rw.append(el('i', 'coin'), el('b', '', '+' + m.rw)); row.append(ttl, rw, pb, el('small', '', m.done ? T('mDoneShort') : mVal(m, v) + ' / ' + mVal(m, m.n)));
@@ -1242,7 +1433,7 @@ const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, newMission, fillMissions, mProg, mText, slots, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
