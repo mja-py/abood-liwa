@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- full screen from the first frame, in the game's night-sky blue, so there is no white flash before the page draws -->
+    <style name="Game" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/night</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:statusBarColor">@color/night</item>
+        <item name="android:navigationBarColor">@color/night</item>
+    </style>
+    <color name="night">#232a52</color>
+</resources>

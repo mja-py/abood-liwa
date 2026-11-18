@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the picture fills the whole layer, sky and sand included, so every launcher shape is cut from it; the colour is only a fallback -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/night" />
+    <foreground android:drawable="@mipmap/ic_launcher_fg" />
+</adaptive-icon>
