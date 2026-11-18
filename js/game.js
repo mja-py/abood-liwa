@@ -22,6 +22,7 @@ const SAVE_KEY = 'abood-liwa-v1';
 const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], tank: 0, muted: false, runs: 0, xp: 0, lvl: 1, up: {}, missions: [], mrec: [], medals: {}, times: {}, day: '', streak: 0, truck: 'classic', trucks: ['classic'] };
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 save.up = Object.assign({ engine: 0, tyres: 0, balance: 0, tank: Math.min(5, save.tank || 0), magnet: 0 }, save.up);
+if (save.tut === undefined) save.tut = save.runs > 0 ? 1 : 0; // the first lesson is for a first visit: 0 until it has been finished or skipped. Anyone who has already driven does not need it.
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
 const COLORS = { // white first: the classic desert car, and Abood's red shemagh stands out against it
   white: { main: '#fbf9f2', dark: '#8f887a', trim: SHEMAGH, cost: 0 }, teal: { main: '#1f7a74', dark: '#123f3c', trim: '#fffaf0', cost: 150 },
@@ -640,6 +641,7 @@ function blit(c, e, x, y, flip) {
 const dayKey = (d = new Date()) => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
 function rng(seed) { return () => { seed = seed + 0x6D2B79F5 | 0; let v = Math.imul(seed ^ seed >>> 15, 1 | seed); v = v + Math.imul(v ^ v >>> 7, 61 | v) ^ v; return ((v ^ v >>> 14) >>> 0) / 4294967296; }; }
 const PROPS = [], DATES = [], CANS = [], ANIMALS = [], RAMPS = [], HOOPS = [], PADS = [], GOLD = [];
+let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden dates were last dealt for, and the function that deals them
 (function place() {
   const P = (kind, x, y, flip) => PROPS.push({ kind, x, y, flip: !!flip, rad: KIND[kind][2] });
   let q = site('camp'); P('tent', q.x, q.y - 70); P('fire', q.x - 105, q.y + 34); P('baba', q.x - 60, q.y - 4); P('palm', q.x + 138, q.y - 58); P('flag', q.x + 92, q.y - 96);
@@ -656,15 +658,19 @@ const PROPS = [], DATES = [], CANS = [], ANIMALS = [], RAMPS = [], HOOPS = [], P
     if (hash2(i, j + 99) > 0.3) continue; const x = (i + hash2(i + 7, j)) * 280, y = (j + hash2(i, j - 7)) * 280;
     if (Math.hypot(x, y) < R - 80 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + 30)) P('shrub', x, y, hash2(i, j) > 0.5);
   }
-  const r = rng(20261110);
-  for (let i = 0; i < 6; i++) DATES.push({ x: 170 + i * 50, y: 120 - i * 14 }); // a first trail leading out of the camp
-  for (let k = 0; k < 48; k++) { // lines of dates curving across the dunes
-    const a = r() * TAU, d = 300 + Math.sqrt(r()) * (R - 560), bend = (r() - 0.5) * 0.3, n = 5 + (r() * 3 | 0); let x = Math.cos(a) * d, y = Math.sin(a) * d, an = r() * TAU;
-    for (let i = 0; i < n; i++) { if (Math.hypot(x, y) < R - 120) DATES.push({ x, y }); an += bend; x += Math.cos(an) * 48; y += Math.sin(an) * 48; }
-  }
-  CANS.push({ x: 540, y: -280 });
-  for (let tries = 0; CANS.length < 16 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.sqrt(r()) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
-    if (CANS.every(o => Math.hypot(o.x - x, o.y - y) > 640) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) CANS.push({ x, y }); }
+  // What is scattered on the sand: 48 lines of dates curving across the dunes, and 16 jerrycans spaced well apart. The first jerrycan
+  // is always in the same place near the camp, so a first run can always reach one.
+  const scatter = r => { const dates = [], cans = [{ x: 540, y: -280 }];
+    for (let k = 0; k < 48; k++) {
+      const a = r() * TAU, d = 300 + Math.sqrt(r()) * (R - 560), bend = (r() - 0.5) * 0.3, n = 5 + (r() * 3 | 0); let x = Math.cos(a) * d, y = Math.sin(a) * d, an = r() * TAU;
+      for (let i = 0; i < n; i++) { if (Math.hypot(x, y) < R - 120) dates.push({ x, y }); an += bend; x += Math.cos(an) * 48; y += Math.sin(an) * 48; }
+    }
+    for (let tries = 0; cans.length < 16 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.sqrt(r()) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
+      if (cans.every(o => Math.hypot(o.x - x, o.y - y) > 640) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
+    return { dates, cans }; };
+  // The dates and jerrycans are dealt afresh every day (dealDay, below). They used to come from this one fixed stream of numbers, and the
+  // ramps come next from the same stream. So the old scatter is still drawn from it here and thrown away: every ramp stays where it has always been.
+  const r = rng(20261110); scatter(r);
   // The playground. Ramps: wooden kickers that throw the car into the air, each turned to face the longest drop it can find. Half of them
   // have a hoop to fly through, and some a boost strip on the run-up, so a strip, a ramp and a hoop make one line to drive.
   const slope = (x, y) => Math.hypot(H(x + 6, y) - H(x - 6, y), H(x, y + 6) - H(x, y - 6)) / 12;
@@ -684,10 +690,18 @@ const PROPS = [], DATES = [], CANS = [], ANIMALS = [], RAMPS = [], HOOPS = [], P
     const a = r() * TAU, d = 600 + Math.sqrt(r()) * (R - 1100), x = Math.cos(a) * d, y = Math.sin(a) * d, dir = Math.atan2(WY, WX) + (r() - 0.5) * 0.9;
     if (open(x, y, 120) && slope(x, y) < 0.2 && PADS.every(o => Math.hypot(o.x - x, o.y - y) > 500) && RAMPS.every(o => Math.hypot(o.x - x, o.y - y) > 200)) PADS.push({ x, y, a: dir, cs: Math.cos(dir), sn: Math.sin(dir), cd: 0 });
   }
-  // Golden dates, worth ten each: one on the top of every big dune, and four more that move to new places every day.
-  for (const q of HILLS) GOLD.push({ x: q.x, y: q.y });
-  { let h = 11; for (const ch of dayKey()) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0; const g = rng(h);
-    for (let tries = 0; GOLD.length < HILLS.length + 4 && tries < 2000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 700)) GOLD.push({ x, y }); } }
+  // Today's sand. The lines of dates, the jerrycans and four of the golden dates are placed from the date, so every day is a different
+  // map to learn, and everyone playing that day has the same one. What never moves: the trail of six dates out of the camp, the first
+  // jerrycan, a golden date (worth ten) on the top of every big dune, and the ramps, hoops and boost strips.
+  dealDay = () => {
+    worldDay = dayKey(); let h = 11; for (const ch of worldDay) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0;
+    const g = rng(h), s = scatter(rng(h ^ 0x51ed270b));
+    DATES.length = 0; for (let i = 0; i < 6; i++) DATES.push({ x: 170 + i * 50, y: 120 - i * 14 }); for (const o of s.dates) DATES.push(o);
+    CANS.length = 0; for (const o of s.cans) CANS.push(o);
+    GOLD.length = 0; for (const q of HILLS) GOLD.push({ x: q.x, y: q.y });
+    for (let tries = 0; GOLD.length < HILLS.length + 4 && tries < 2000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 700)) GOLD.push({ x, y }); }
+  };
+  dealDay();
   const herd = (kind, id, n, spread) => { const s = typeof id === 'string' ? site(id) : id; for (let k = 0; k < n; k++) { const a = k / n * TAU + 0.6, x = s.x + Math.cos(a) * spread, y = s.y + Math.sin(a) * spread * 0.7;
     ANIMALS.push({ kind, x, y, hx: s.x, hy: s.y, tx: x, ty: y, ph: k, dir: k % 2 ? 1 : -1, wait: 1 + k, run: 0, rx: 0, ry: 0, rad: KIND[kind][2] }); } };
   herd('camel', 'camels', 5, 130); herd('oryx', 'oryx', 4, 110);
@@ -715,7 +729,12 @@ function resize() {
   if (w !== cv.width || h !== cv.height) { cv.width = w; cv.height = h; }
   W = w; Hh = h; zoom = Math.sqrt(W * Hh / (800 * 470)); // every screen shape sees about the same amount of desert
 }
-function note(text, cls, secs = 2.4) { const n = $('note'); n.textContent = text; n.className = cls || ''; n.hidden = false; noteT = secs; }
+function note(text, cls, secs = 2.4) { const n = $('note'); n.textContent = text; n.className = cls || ''; n.hidden = false; noteT = secs; notePlace(); }
+function notePlace() { // During the first lesson a note must not cover Baba's card: it goes in the gap between the card and the round map, or under the card if that gap is too narrow.
+  const n = $('note'); n.style.cssText = ''; if (!run.tut || n.hidden) return;
+  const a = $('tut').getBoundingClientRect(), m = $('miniBtn').getBoundingClientRect(), x0 = Math.min(a.right, m.right) + 10, x1 = Math.max(a.left, m.left) - 10;
+  if (x1 - x0 >= 210) { n.style.left = (x0 + x1) / 2 + 'px'; n.style.maxWidth = x1 - x0 + 'px'; n.style.minWidth = '0'; } else n.style.top = Math.round(a.bottom + 8) + 'px';
+}
 function float(x, y, txt, col) { floats.push({ x, y, txt, col: col || '#fffaf0', life: 1.3 }); if (floats.length > 12) floats.shift(); }
 // particles. c: 0 dust, 1 thrown wet sand, 2 smoke, 3 flame, 4 gold sparks (sparks fly out and shrink; the rest drift and swell)
 const PCOL = ['244,214,160', '168,112,66', '96,86,80', '255,150,50', '255,232,140'];
@@ -846,7 +865,7 @@ function checkMissions() {
 // The three targets on the screen while driving: the first three missions, each with a bar that fills, a tick when it is done, then its replacement.
 let misKey = '';
 function misHud(force) {
-  const el = $('mis'); if (run.race) return;
+  const el = $('mis'); if (run.race) return; if (run.tut) { el.hidden = true; return; } // the targets wait while Baba is teaching
   const show3 = save.missions.slice(0, 3), key = show3.map(m => m.t + (m.done ? 'D' : '') + '|' + mVal(m, Math.min(m.n, mProg(m))) + '|' + m.n + (m.fresh && run.t - m.fresh < 2 ? 'F' : '')).join(';') + getLang();
   if (!force && key === misKey) return; misKey = key;
   while (el.children.length > show3.length) el.lastChild.remove();
@@ -855,6 +874,50 @@ function misHud(force) {
     row.children[0].style.transform = `scaleX(${m.done ? 1 : clamp(v / m.n, 0, 1)})`; const tx = mText(m), val = m.done ? '✓' : mVal(m, v) + ' / ' + mVal(m, m.n);
     if (row.children[1].textContent !== tx) row.children[1].textContent = tx; if (row.children[2].textContent !== val) row.children[2].textContent = val; });
   el.hidden = !show3.length;
+}
+// ---------- the first lesson ----------
+// A new player's first run is taught by Baba, one thing at a time, and each step ends when the player has really done it: drive, collect
+// the trail of dates out of the camp, fly off the first ramp, drift, pick up the jerrycan. Meanwhile the fuel does not run down, the mission
+// targets wait, and Skip is always there. Afterwards the run simply carries on. It is never given in a race.
+const TUT = ['drive', 'dates', 'jump', 'drift', 'can'], TUT_PAY = 30;
+let padUsed = coarse, tutKey = ''; // padUsed: teach with the words for the pad (a finger or the mouse) or for the keyboard, whichever was used last
+function tutGoal() { // where this step's ring and arrow go, if it has a place
+  const k = TUT[run.tut.i];
+  if (k === 'dates') { let best = null, bd = 1e9; for (let i = 0; i < 6; i++) { const o = DATES[i], d = Math.hypot(o.x - car.x, o.y - car.y); if (!o.off && d < bd) { bd = d; best = o; } } return best && { x: best.x, y: best.y, r: 30 }; }
+  if (k === 'jump') { const o = RAMPS[0], dx = car.x - o.x, dy = car.y - o.y, lined = dx * o.cs + dy * o.sn < -70 && Math.abs(dy * o.cs - dx * o.sn) < 90; // first to the start of the run-up, then up the ramp
+    return lined ? { x: o.x, y: o.y, r: 46, ramp: o } : { x: o.x - o.cs * 200, y: o.y - o.sn * 200, r: 40, ramp: o }; }
+  if (k === 'can') return { x: CANS[0].x, y: CANS[0].y, r: 34 };
+  return null;
+}
+function tutHud(p, n) { // Baba's card; the page is only touched when what it says changes
+  const u = run.tut, k = TUT[u.i], ok = u.ok > 0, key = u.i + (ok ? 'k' : '') + '|' + p + '|' + padUsed + getLang(); if (key === tutKey) return; tutKey = key;
+  $('tutStep').textContent = (u.i + 1) + ' / ' + TUT.length; $('tutFill').style.width = Math.round((u.i + (ok ? 1 : 0)) / TUT.length * 100) + '%';
+  $('tutText').textContent = ok ? T('tutOk')[u.i] : T('tut_' + k + (k === 'drive' || k === 'drift' ? (padUsed ? '_p' : '_k') : ''));
+  $('tutCount').textContent = !ok && n ? p + ' / ' + n : ''; $('tut').classList.toggle('ok', ok); notePlace(); // the card may have grown or shrunk under a note
+}
+function tutTick(dt) {
+  const u = run.tut, k = TUT[u.i]; let p = 0, n = 0;
+  if (u.ok > 0) { // a moment of praise, then the next thing
+    if ((u.ok -= dt) > 0) return;
+    if (++u.i >= TUT.length) { tutEnd(true); return; }
+    u.d0 = run.dist; u.r0 = run.ramps; u.f0 = run.drift + (car.drift ? car.dsc : 0);
+  } else {
+    let done;
+    if (k === 'drive') done = run.dist - u.d0 > 240;                                              // 30 m
+    else if (k === 'dates') { n = 6; for (let i = 0; i < 6; i++) if (DATES[i].off) p++; done = p >= n; }
+    else if (k === 'jump') done = run.ramps > u.r0 || (car.air && car.airT > 0.3);                // off the ramp, or off any crest
+    else if (k === 'drift') done = run.drift + (car.drift ? car.dsc : 0) - u.f0 >= 30;            // a real slide, scoring
+    else done = CANS[0].off || run.cans > 0;
+    if (done) { u.ok = 1.1; play('zone', 1.05 + u.i * 0.07); buzz(20); spark(car.x, car.y - 60, 10); }
+  }
+  if (TUT[u.i] === 'dates') { n = 6; p = 0; for (let i = 0; i < 6; i++) if (DATES[i].off) p++; }
+  tutHud(p, n);
+}
+function tutEnd(finished) { // finished, skipped, or the run ended under it
+  if (!run.tut) return; run.tut = null; show('tut', false); notePlace();
+  if (finished) { const first = !save.tut; if (first) save.coins += TUT_PAY; note(first ? T('tutDone', TUT_PAY) : T('tutDone0'), 'card', 4.2); play('power', 1.3); spark(car.x, car.y - 60, 22); coinsUI(); }
+  if (finished !== undefined && !save.tut) { save.tut = 1; persist(); } // finishing or skipping settles it; a run that just ended leaves it for next time
+  if (st === 'play' || st === 'pause') misHud(true);
 }
 // races: drive through the places in order against the clock. The daily race changes every day.
 const RACES = [
@@ -905,7 +968,7 @@ function startRoll(dx, dy) { // the car goes over and tumbles in the direction (
   endDrift(); car.twoT = 0;
   const m = Math.hypot(dx, dy) || 1; car.roll = 1; car.rollT = 0; car.rdx = dx / m; car.rdy = dy / m; car.rside = car.rdy * Math.cos(car.ang) - car.rdx * Math.sin(car.ang) < 0 ? -1 : 1; car.air = false; car.tip = 0; car.fp = car.fy = 0;
   if (run.chain > 1) float(car.x, car.y - 85, T('comboLost'), '#ffd9d0'); run.chain = 0;
-  run.rolls++; run.nr = 0; if (!run.race) run.fuel -= 4; shake = 12; buzz(120); play('smash'); puff(car.x, car.y, 0, 0, 14, true); puff(car.x, car.y, 0, 0, 8, false, 1); spark(car.x, car.y - 20, 8, 3); ring(car.x, car.y, '#ffd9d0', 24);
+  run.rolls++; run.nr = 0; if (!run.race && !run.tut) run.fuel -= 4; shake = 12; buzz(120); play('smash'); puff(car.x, car.y, 0, 0, 14, true); puff(car.x, car.y, 0, 0, 8, false, 1); spark(car.x, car.y - 20, 8, 3); ring(car.x, car.y, '#ffd9d0', 24);
   float(car.x, car.y - 40, T('rolled'), '#ffd9d0'); note(pick(T('baba')), 'baba', 2.6);
 }
 function rescue() { // move a trapped car to the nearest open, fairly level sand, looking behind it first
@@ -1063,12 +1126,13 @@ function update(dt) {
     if (!run.seen[s.id]) { run.seen[s.id] = 1; run.seenT[s.id] = run.t; if (!save.cards.includes(s.id)) { save.cards.push(s.id); save.coins += s.coins; run.cards.push(s.id); addXP(30); persist(); coinsUI(); play('zone'); note(T('found', T('s_' + s.id), s.coins), 'card', 3.2); } } }
   if (cur !== run.cur) { run.cur = cur; if (cur) { run.vis.push(cur); if (run.vis.length > 60) run.vis.shift(); } } // the order places were entered, for delivery missions
   run.mt -= dt; if (run.mt <= 0) { run.mt = 0.25; checkMissions(); misHud(); }
+  if (run.tut) tutTick(dt);
   if (run.race) { // race: clock, ghost recording, next checkpoint. Fuel does not run down.
     run.rt += dt; run.recT -= dt; if (run.recT <= 0) { run.recT += 0.2; if (run.rec.length < 6000) run.rec.push(Math.round(car.x), Math.round(car.y), Math.round(car.ang * 100)); }
     const g = site(run.race.pts[run.ri]), dx = g.x - car.x, dy = g.y - car.y, rr = reach(g);
     if (dx * dx + dy * dy < rr * rr) { run.ri++; play('power', 1.2); buzz(30); float(car.x, car.y - 110, (run.ri - 1) + ' / ' + (run.race.pts.length - 1), '#bff0c0'); if (run.ri >= run.race.pts.length) { finishRace(); return; } }
   } else {
-    run.fuel -= dt * (0.25 + 0.75 * Math.abs(thr)) * BURN;
+    if (!run.tut) run.fuel -= dt * (0.25 + 0.75 * Math.abs(thr)) * BURN; // the tank stays full during the first lesson
     if (!run.low && run.fuel < run.max * 0.2 && run.fuel > 0) { run.low = true; note(T('fuelLow'), '', 3); }
     if (run.fuel <= 0) { run.fuel = 0; if (sp < 30 && !car.air && !car.roll) { run.over += dt; if (run.over > 0.9) { endRun(false); return; } } }
   }
@@ -1166,6 +1230,13 @@ function render(dt) {
     const rr = reach(goal); c.strokeStyle = 'rgba(31,122,116,.9)'; c.lineWidth = 7; c.setLineDash([24, 16]); c.lineDashOffset = -t * 50; c.beginPath(); c.arc(goal.x, goal.y, rr, 0, TAU); c.stroke(); c.setLineDash([]);
     const lg = c.createLinearGradient(0, goal.y - 520, 0, goal.y); lg.addColorStop(0, 'rgba(255,250,240,0)'); lg.addColorStop(1, 'rgba(255,250,240,.5)'); c.fillStyle = lg; c.fillRect(goal.x - 20, goal.y - 520, 40, 520);
   }
+  const tg = run.tut && !(run.tut.ok > 0) && (st === 'play' || st === 'pause') ? tutGoal() : null;
+  if (tg) { // the first lesson's target: a turning ring and a column of light, and for the ramp, chevrons running up to it
+    c.strokeStyle = 'rgba(200,32,43,.9)'; c.lineWidth = 6; c.setLineDash([16, 12]); c.lineDashOffset = -t * 40; c.beginPath(); c.arc(tg.x, tg.y, tg.r, 0, TAU); c.stroke(); c.setLineDash([]);
+    const lg = c.createLinearGradient(0, tg.y - 380, 0, tg.y); lg.addColorStop(0, 'rgba(255,250,240,0)'); lg.addColorStop(1, 'rgba(255,250,240,.5)'); c.fillStyle = lg; c.fillRect(tg.x - 14, tg.y - 380, 28, 380);
+    if (tg.ramp) { const o = tg.ramp; c.strokeStyle = 'rgba(255,250,240,.9)'; c.lineWidth = 7; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath();
+      for (let i = 0; i < 4; i++) { const d = -205 + (i * 37.5 + t * 60) % 150, x = o.x + o.cs * d, y = o.y + o.sn * d; c.moveTo(x - o.cs * 13 - o.sn * 17, y - o.sn * 13 + o.cs * 17); c.lineTo(x, y); c.lineTo(x - o.cs * 13 + o.sn * 17, y - o.sn * 13 - o.cs * 17); } c.stroke(); }
+  }
   c.strokeStyle = 'rgba(110,62,34,.3)'; c.lineWidth = 9; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); // tyre marks
   const marks = a => { let pen = false; for (let i = 0; i < a.length; i += 2) { if (isNaN(a[i])) { pen = false; continue; } if (pen) c.lineTo(a[i], a[i + 1]); else c.moveTo(a[i], a[i + 1]); pen = true; } };
   marks(tracks[0]); marks(tracks[1]); c.stroke();
@@ -1208,10 +1279,11 @@ function render(dt) {
   c.font = '800 20px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = INK;
   for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.life -= dt; if (f.life <= 0) { floats.splice(i, 1); continue; } f.y -= 26 * dt; c.globalAlpha = Math.min(1, f.life * 2); c.strokeText(f.txt, f.x, f.y); c.fillStyle = f.col; c.fillText(f.txt, f.x, f.y); }
   c.globalAlpha = 1;
-  if (goal && st === 'play') { // an arrow at the edge of the view, pointing to the next checkpoint
-    const dx = goal.x - car.x, dy = goal.y - car.y, d = Math.hypot(dx, dy);
-    if (d > 300) { const a = Math.atan2(dy, dx), ax = W / 2 + Math.cos(a) * W * 0.34, ay = Hh / 2 + Math.sin(a) * Hh * 0.3, u = dpr;
-      c.setTransform(u, 0, 0, u, ax, ay); c.rotate(a); c.fillStyle = '#1f7a74'; c.strokeStyle = '#fffaf0'; c.lineWidth = 3; c.lineJoin = 'round'; c.beginPath(); c.moveTo(24, 0); c.lineTo(-12, -16); c.lineTo(-4, 0); c.lineTo(-12, 16); c.closePath(); c.fill(); c.stroke();
+  const ptr = goal || tg;
+  if (ptr && st === 'play') { // an arrow at the edge of the view, pointing to the next checkpoint, or to what the first lesson is asking for
+    const dx = ptr.x - car.x, dy = ptr.y - car.y, d = Math.hypot(dx, dy);
+    if (d > (goal ? 300 : 200)) { const a = Math.atan2(dy, dx), ax = W / 2 + Math.cos(a) * W * 0.34, ay = Hh / 2 + Math.sin(a) * Hh * 0.3, u = dpr;
+      c.setTransform(u, 0, 0, u, ax, ay); c.rotate(a); c.fillStyle = goal ? '#1f7a74' : SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 3; c.lineJoin = 'round'; c.beginPath(); c.moveTo(24, 0); c.lineTo(-12, -16); c.lineTo(-4, 0); c.lineTo(-12, 16); c.closePath(); c.fill(); c.stroke();
       c.setTransform(u, 0, 0, u, ax - Math.cos(a) * 34, ay - Math.sin(a) * 34); c.font = '800 15px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 4; c.strokeStyle = INK; c.strokeText(nf(d / 8), 0, 0); c.fillStyle = '#fffaf0'; c.fillText(nf(d / 8), 0, 0); c.textBaseline = 'alphabetic'; }
   }
   if (joy.on && st === 'play') { // the pad under the finger: the inner ring is driving, the outer ring is where pressing hard begins
@@ -1270,17 +1342,24 @@ function coinsUI() { document.querySelectorAll('.coinVal').forEach(e => { e.text
 const ICON_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg>', ICON_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9zM17 9.5l5 5M22 9.5l-5 5"/></svg>';
 function muteUI() { $('menuMute').innerHTML = save.muted ? ICON_OFF : ICON_ON; $('menuMute').setAttribute('aria-pressed', save.muted); $('mute').textContent = save.muted ? '×' : '♪'; if (master) master.gain.value = save.muted ? 0 : 1; }
 function toggleMute() { save.muted = !save.muted; persist(); unlockAudio(); muteUI(); }
+function dayGift() { // once a day: the gift for coming back, and word that the sand has been dealt afresh
+  const today = dayKey(); if (save.day === today) return;
+  const y = new Date(), back = !!save.day; y.setDate(y.getDate() - 1); save.streak = save.day === dayKey(y) ? save.streak + 1 : 1; save.day = today;
+  const c = 15 * Math.min(7, save.streak); save.coins += c; persist(); coinsUI(); note(T('daily', save.streak, c) + (back ? ' · ' + T('newSand') : ''), 'card', back ? 6 : 4.5);
+}
+function newDay() { if (dayKey() === worldDay) return; dealDay(); dayGift(); } // the game was left open past midnight: checked between runs, never during one
 function resetWorld() { for (const a of [DATES, CANS, GOLD, HOOPS]) for (const o of a) o.off = false; for (const o of PADS) o.cd = 0; }
 function showMenu() {
-  st = 'menu'; resetCar(); resetWorld();
-  ['hud', 'mis', 'miniBtn', 'pauseBtn', 'mute', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
+  st = 'menu'; tutEnd(); newDay(); resetCar(); resetWorld();
+  ['hud', 'mis', 'tut', 'miniBtn', 'pauseBtn', 'mute', 'over', 'pausePop', 'sheet'].forEach(id => show(id, false)); show('menu', true); coinsUI();
   const b = $('menuBest'); b.hidden = !save.best; b.textContent = T('best', save.best); releaseWake();
 }
-function startRun(rc) { // rc: a race to drive, or nothing for a free safari
-  unlockAudio(); st = 'play'; resetCar(); resetWorld();
+function startRun(rc, lesson) { // rc: a race to drive, or nothing for a free safari. lesson: give the first lesson again, asked for from How to play
+  unlockAudio(); st = 'play'; newDay(); resetCar(); resetWorld();
   const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl });
   Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
+  run.tut = !rc && (lesson || !save.tut) ? { i: 0, ok: 0, d0: 0, r0: 0, f0: 0 } : null; tutKey = ''; show('tut', !!run.tut); if (run.tut) tutHud(0, 0);
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
   $('distLbl').textContent = rc ? '' : T('m'); $('dateLbl').textContent = rc ? T('cp') : T('dates'); show('fuelBox', !rc);
   const mi = $('mis'); mi.textContent = ''; misKey = ''; mi.hidden = !rc; mi.classList.toggle('race', !!rc); if (rc) mi.textContent = T('raceHud', T('r_' + rc.id), fmtTime(raceTargets(rc)[2])); else { for (const q of save.missions) { delete q.o; delete q.fresh; } misHud(true); }
@@ -1294,7 +1373,7 @@ function resume() { if (st !== 'pause') return; unlockAudio(); st = 'play'; show
 async function endRun(early) {
   if (st !== 'play' && st !== 'pause') return;
   const dn = run.done, raced = !!run.race;
-  st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'mis', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
+  tutEnd(); st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'mis', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
   const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
   run.newBest = !raced && m > save.best; if (run.newBest) save.best = m; save.coins += total;
   endDrift(); endTwo(); checkMissions(); addXP(m / 40 + run.dates / 2 + run.stunt / 25);
@@ -1382,6 +1461,7 @@ function openSheet(id) {
       tg.forEach((sec, i) => { const sp = el('span', 'md m' + (i + 1) + (med > i ? ' on' : '')); sp.append(el('i'), el('span', '', fmtTime(sec))); tm.append(sp); }); if (best) tm.append(el('span', 'best', T('bestTime', fmtTime(best)))); info.append(tm);
       const btn = el('button', 'btn', locked ? T('locked', rc.lvl) : T('raceGo')); btn.type = 'button'; btn.disabled = locked; btn.onclick = () => startRun(rc); row.append(info, btn); body.append(row); }
   } else { const ol = el('ol', 'help-list'); for (const line of T('help')) ol.append(el('li', '', line));
+    if (st === 'menu') { const again = el('button', 'ghost again', T('tutAgain')); again.type = 'button'; again.onclick = () => { closeSheet(); startRun(null, true); }; body.append(again); } // Baba's first lesson, for anyone who wants it again
     // one line for support: the version, where it is running, and what the screen has reported (touches started / moved / cancelled, pointers down / cancelled, focus lost)
     body.append(ol, el('p', 'diag', `${BUILD.startsWith('__') ? 'dev' : BUILD} · ${IOS ? 'iOS' : 'web'}${APP ? ' app' : ''} · touch ${diag.ts}/${diag.tm}/${diag.tc} · pointer ${diag.pd}/${diag.pc} · blur ${diag.bl}`)); }
   show('sheet', true);
@@ -1395,7 +1475,7 @@ function releaseWake() { try { wl && wl.release(); } catch (e) {} wl = null; }
 
 // ---------- input ----------
 addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return; keys[e.code] = 1;
+  if (e.target.tagName === 'INPUT') return; keys[e.code] = 1; if (/^(Arrow|Key[WASD]$|Space)/.test(e.code)) padUsed = false;
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (e.code === 'KeyP' || e.code === 'Escape') { if (!$('sheet').hidden) closeSheet(); else if (st === 'play') pause(); else if (st === 'pause') resume(); }
   if (e.code === 'Enter' && $('sheet').hidden && $('langPick').hidden) { if (st === 'menu') startRun(); else if (st === 'over') startRun(run.race); else if (st === 'pause') resume(); }
@@ -1405,7 +1485,7 @@ addEventListener('keyup', e => { keys[e.code] = 0; });
 // with preventDefault, so the browser's own gestures (scroll, zoom, the text loupe, drag and drop) can never take the finger away.
 // That matters most on iPad and iPhone, above all in the home-screen app. A mouse or a pen comes through pointer events.
 const TOUCH = 'ontouchstart' in window, own = e => { if (e.cancelable) e.preventDefault(); }, diag = { ts: 0, tm: 0, tc: 0, pd: 0, pc: 0, bl: 0 }; // counts of what the screen has reported, shown at the foot of How to play
-const joyStart = (src, id, x, y) => { if (st !== 'play') return; joy.on = true; joy.hard = false; joy.src = src; joy.id = id; joy.ox = joy.x = x; joy.oy = joy.y = y; }; // the newest finger takes over, so steering can never get stuck on a lost one
+const joyStart = (src, id, x, y) => { if (st !== 'play') return; padUsed = true; joy.on = true; joy.hard = false; joy.src = src; joy.id = id; joy.ox = joy.x = x; joy.oy = joy.y = y; }; // the newest finger takes over, so steering can never get stuck on a lost one
 const joyMove = (src, id, x, y) => { if (!joy.on) joyStart(src, id, x, y); else if (joy.src === src && joy.id === id) { joy.x = x; joy.y = y; } }; // a finger that is still moving after the steering was dropped picks it up again
 const joyEnd = (src, id) => { if (joy.on && joy.src === src && joy.id === id) joy.on = false; };
 if (TOUCH) {
@@ -1425,6 +1505,7 @@ cv.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 $('startBtn').onclick = () => startRun(); $('againBtn').onclick = () => startRun(run.race); $('overMenuBtn').onclick = showMenu;
 $('pauseBtn').onclick = pause; $('resumeBtn').onclick = resume; $('pauseMenuBtn').onclick = () => endRun(true);
+$('tutSkip').onclick = () => tutEnd(false);
 $('mute').onclick = toggleMute; $('menuMute').onclick = toggleMute; $('sheetClose').onclick = closeSheet;
 $('miniBtn').onclick = () => { if (st === 'play') { st = 'pause'; joy.on = false; releaseWake(); openSheet('map'); } };
 document.querySelectorAll('[data-sheet]').forEach(b => { b.onclick = () => { unlockAudio(); openSheet(b.dataset.sheet); }; });
@@ -1432,8 +1513,8 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-lang
 const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
-onLang(() => { SPR.delete('gate'); coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
+onLang(() => { SPR.delete('gate'); tutKey = ''; coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
@@ -1450,10 +1531,11 @@ new ResizeObserver(resize).observe(cv); // after layout, before paint: the pictu
   await bakeMini(p => prog(0.3 + p * 0.25)); prog(0.55); await nextFrame();
   let n = 0; for (let iy = -3; iy <= 2; iy++) for (let ix = -4; ix <= 3; ix++) { bakeBudget = 1; tile(ix, iy); if (++n % 4 === 0) { prog(0.55 + n / 48 * 0.35); await nextFrame(); } }
   for (const k of Object.keys(KIND)) { if (k === 'camel' || k === 'oryx' || k === 'gazelle') for (let q = 0; q < 4; q++) spr(k, q); else spr(k); } // bake every sprite once
+  { const fc = $('tutFace').getContext('2d'); fc.setTransform(2, 0, 0, 2, 40, 190); fc.lineJoin = fc.lineCap = 'round'; person(fc, 0, 0, 0.6, BABA); } // Baba's face for the first lesson's card
   prog(1); $('ldMsg').textContent = T('ready'); await nextFrame();
   const today = dayKey(); for (const o of [save.medals, save.times, ghosts]) for (const k of Object.keys(o)) if (k.startsWith('daily:') && k !== 'daily:' + today) delete o[k];
   fillMissions(); showMenu(); $('loader').classList.add('done');
-  if (save.day !== today) { const y = new Date(); y.setDate(y.getDate() - 1); save.streak = save.day === dayKey(y) ? save.streak + 1 : 1; save.day = today; const c = 15 * Math.min(7, save.streak); save.coins += c; persist(); coinsUI(); note(T('daily', save.streak, c), 'card', 4.5); } setTimeout(() => { $('loader').hidden = true; }, 500);
+  dayGift(); setTimeout(() => { $('loader').hidden = true; }, 500);
   if (!hasStoredLang()) show('langPick', true);
   if (IOS && !APP) show('iosHint', true);
   // offline cache, and a note when a new version has been installed

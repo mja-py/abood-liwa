@@ -6,6 +6,7 @@ A free-roam dune safari for the browser, and a sister game to *Run, Abood!* and 
 
 ## How to play
 
+- **The first lesson:** a new player's first run is taught by Baba, one step at a time: drive, collect the six dates leading out of the camp, fly off the first ramp, drift, and pick up the red jerrycan. Each step ends when you have actually done it, and a ring and an arrow show where to go. The fuel does not run down meanwhile, Skip is always on the card, and finishing pays 30 dirhams. The run then carries on as normal. A lesson left unfinished is offered again on the next run; players who had already driven before it existed never see it. *How to play* has a button to take it again. Races never have it.
 - **Touch:** put a finger anywhere and drag the way you want to go. Two rings appear under it: inside the first, the further you drag the faster you go; out past the second is *pressing hard*, which slides the car and does tricks in the air (see Stunts). There are no buttons to find. Drag backwards behind a car that is standing still, or held against something, and it reverses, swings its nose round to your finger and drives off.
 - **Keyboard:** arrow keys or WASD. Up accelerates, down brakes and reverses, left and right steer. P or Esc pauses.
 - **Dunes** are real ones in cross-section: a long gentle windward ramp that is still climbing at the crest, a sharp crest that catches the light, and a short dark slip face. They all face downwind. Build speed up the ramp and the car flies off the crest; coming the other way, the engine pulls 60% harder uphill and drops into low gear at a crawl, so the car charges the slip face, throws a tail of sand, and has speed left to hop the crest. The steepest faces on Tal Moreeb can still stop it; stall there and Baba says so.
@@ -41,6 +42,7 @@ Between the places the sand is a playground:
 - **Hoops:** every second ramp has a red and white hoop to fly through, worth 120 stunt points once a run.
 - **Boost strips:** 12 strips of arrows on the sand give a shove the way they point. Some sit on the run-up to a ramp, so strip, ramp and hoop make one line.
 - **Golden dates:** worth ten dates each. One sits on top of each big dune, and four more move to new places every day.
+- **Today's sand:** the 48 lines of dates and 15 of the 16 jerrycans are placed from the date, so every day is a different map to learn, and everyone playing that day has the same one. The trail of six dates out of the camp, the first jerrycan, and every ramp, hoop and boost strip stay where they are. If the game is left open past midnight the new day is dealt between runs, never during one.
 
 ## Stunts
 
@@ -59,7 +61,7 @@ What keeps a run worth starting once every postcard is found:
 - **Harder with level:** targets grow with your level up to a cap; each mission is one, two or three stars, and three-star missions go from about 1 in 12 at level 1 to nearly half from level 14 (an easy one is set as if two levels lower, a hard one four higher, and pays half as much again); and from level 5 some carry a twist: do it without rolling. A mission you do not fancy can be swapped in the Missions sheet for a few dirhams. The table of kinds is `MK` in `js/game.js`.
 - **Levels:** missions, postcards, races and every run give experience; each level needs more than the last (125, 190, 265 … ). Each level pays dirhams, tops up the tank if it comes mid-run, and moves you up five ranks from Beginner to Desert falcon. Most levels open something: races at 2, 4, 5 and 7, the pickup at 3, a fourth mission at 4, the sand buggy at 6, a fifth mission at 8, the monster truck at 10. The results card and the Missions sheet always show the bar and the next thing it unlocks.
 - **Races:** drive through places in order against the clock for bronze, silver and gold. Five fixed races unlock by level, and a race of the day changes daily. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
-- **Daily gift:** dirhams for the first visit each day, growing over seven days in a row.
+- **Daily gift:** dirhams for the first visit each day, growing over seven days in a row. The same note tells a returning player that the sand has been dealt afresh.
 - **Upgrades:** engine, tyres, balance, tank and date basket, five levels each (100, 250, 500, 900, 1,500).
 
 ## Animals
