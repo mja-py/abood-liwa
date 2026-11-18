@@ -209,6 +209,18 @@ body:has(#menu:not([hidden])) #mute{display:none} /* the menu has its own sound 
 .again{align-self:center;margin:2px auto 0}
 @media (max-width:640px){ #tut{width:calc(100% - 170px);padding:5px 7px 7px;gap:6px} #tut canvas{width:34px;height:34px} #tutText{font-size:13.5px} }
 @media (prefers-reduced-motion:reduce){ #tut.ok{animation:none} .tut-foot .pbar i{transition:none} }
+/* A phone held sideways has little height, and the car sits in the middle of it. There the card becomes a low strip in the middle, under the
+   fuel bar: the words and Skip on one line, the progress bar a thin line beneath. It stays above the car and off the dates beside it. */
+@media (max-height:480px){
+  #tut{inset-inline:0;margin-inline:auto;top:calc(50px + env(safe-area-inset-top,0px));width:min(560px,calc(100% - 290px));padding:4px 8px 5px;gap:7px;align-items:center}
+  #tut canvas{width:30px;height:30px}
+  .tut-body{grid-template-columns:1fr auto auto auto;grid-template-areas:"text count step skip" "bar bar bar bar";gap:3px 7px;align-items:center}
+  .tut-top,.tut-foot{display:contents} .tut-top b{display:none}
+  #tutText{grid-area:text;font-size:13px;line-height:1.3} #tutCount{grid-area:count} #tutStep{grid-area:step;flex:none;font-size:12px} #tutSkip{grid-area:skip;min-height:24px;padding:0 9px}
+  .tut-foot .pbar{grid-area:bar;height:6px} #tut.ok #tutText{font-size:15px}
+}
+@media (max-height:480px) and (max-width:720px){ #tut{width:calc(100% - 262px)} #tut canvas{display:none} }
+@media (max-height:340px){ #tut{top:calc(46px + env(safe-area-inset-top,0px));padding:3px 8px 4px} #tutText{font-size:12px;line-height:1.25} #tutStep{display:none} } /* the smallest phones: smaller words, and no step count */
 #mis.race{inset-inline-start:auto;left:50%;transform:translateX(-50%);top:calc(40px + env(safe-area-inset-top,0px));width:auto;max-width:min(360px,calc(100% - 320px));display:block;background:rgba(43,26,18,.72);border-radius:999px;padding:1px 14px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #note.big{font-size:56px;line-height:1.1;font-weight:800;background:var(--shemagh);border:3px solid var(--ink);box-shadow:0 5px 0 var(--ink);min-width:110px;top:30%}
 .pbar{height:12px;border:2px solid var(--ink);border-radius:8px;background:#e9dcc0;overflow:hidden}

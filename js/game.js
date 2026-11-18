@@ -732,8 +732,9 @@ function resize() {
 function note(text, cls, secs = 2.4) { const n = $('note'); n.textContent = text; n.className = cls || ''; n.hidden = false; noteT = secs; notePlace(); }
 function notePlace() { // During the first lesson a note must not cover Baba's card: it goes in the gap between the card and the round map, or under the card if that gap is too narrow.
   const n = $('note'); n.style.cssText = ''; if (!run.tut || n.hidden) return;
+  if (matchMedia('(max-height:480px)').matches) { n.style.top = 'auto'; n.style.bottom = 'calc(18px + env(safe-area-inset-bottom,0px))'; return; } // a phone held sideways: the card is a strip across the top middle (see the style sheet), so a note goes to the foot of the screen, clear of the car
   const a = $('tut').getBoundingClientRect(), m = $('miniBtn').getBoundingClientRect(), x0 = Math.min(a.right, m.right) + 10, x1 = Math.max(a.left, m.left) - 10;
-  if (x1 - x0 >= 210) { n.style.left = (x0 + x1) / 2 + 'px'; n.style.maxWidth = x1 - x0 + 'px'; n.style.minWidth = '0'; } else n.style.top = Math.round(a.bottom + 8) + 'px';
+  if (x1 - x0 >= 210) { n.style.left = (x0 + x1) / 2 + 'px'; n.style.maxWidth = x1 - x0 + 'px'; n.style.minWidth = '0'; } else n.style.top = Math.round(Math.max(a.bottom, m.bottom) + 8) + 'px'; // under whichever of the card and the map reaches lower
 }
 function float(x, y, txt, col) { floats.push({ x, y, txt, col: col || '#fffaf0', life: 1.3 }); if (floats.length > 12) floats.shift(); }
 // particles. c: 0 dust, 1 thrown wet sand, 2 smoke, 3 flame, 4 gold sparks (sparks fly out and shrink; the rest drift and swell)
