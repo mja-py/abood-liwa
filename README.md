@@ -17,7 +17,7 @@ A free-roam dune safari for the browser, and a sister game to *Run, Abood!* and 
 
 ## The map
 
-The reserve is a circle 13.6 km of pixels across, ringed by red flags: about 20 seconds from the camp to the rim at full speed, and 10 to 15 seconds from the camp to most places. The camp and the old well are in the middle; the other nine places stand in a wide ring further out. The first visit to a place gives its postcard and dirhams, more the further out it is.
+The reserve is a circle 13.6 km of pixels across, ringed by red flags: about 20 seconds from the camp to the rim at full speed, and 10 to 15 seconds from the camp to most places. The camp and the old well are in the middle; nine more places stand in a wide ring further out, and seven more beyond those, towards the rim. That makes 18. The first visit to a place gives its postcard and dirhams, more the further out it is.
 
 There are two maps:
 
@@ -65,7 +65,16 @@ On the level the first car tops out near 430 pixels a second on the home sands, 
 | The old well | Stone well with a bucket |
 | The salt flat | A pale, flat sabkha: the fastest ground on the map |
 | Date festival | A stall of date baskets |
-| Empty Quarter gate | The sign at the southern rim |
+| Empty Quarter gate | The sign that marks the way into the Empty Quarter |
+| Desert roses | Rosettes of sand crystal at the far end of the salt plain |
+| The grandstand | A crowd under a striped awning at the foot of Tal Moreeb, and the start arch of the hill climb |
+| The watchtower | A mud-brick tower on the eastern rim |
+| The far camp | A second camp deep in the Empty Quarter, with fuel drums |
+| Camel race track | An oval of raked sand between white rails, with racing camels |
+| Date farm | A house, a watered field and nine palms in rows |
+| The old village | Mud-brick houses, a wind tower and a well |
+
+**Fuel stops:** the camp, the old well and the far camp each put 40% of a tank back, once a run, when the tank is under 60%. Fuel drums with a red jerrycan on top mark them, and on the maps a red dot on the place means it has not been used yet.
 
 Camels and oryx wander near home and trot away from a fast car.
 
@@ -76,8 +85,8 @@ Between the places the sand is a playground:
 - **Hoops:** every second ramp has a red and white hoop to fly through, worth 120 stunt points once a run.
 - **Boost strips:** about 40 strips of arrows on the sand give a shove the way they point. Some sit on the run-up to a ramp, so strip, ramp and hoop make one line.
 - **Golden dates:** worth ten dates each. One sits on top of each big dune, and eight more move to new places every day.
-- **Fuel:** there are only 12 jerrycans in the whole reserve, well apart, so fuel has to be looked for on the map. From most places the nearest is about 5 seconds' drive away, from the emptiest corners about 10.
-- **Today's sand:** the 180 lines of dates and 11 of the 12 jerrycans are placed from the date, so every day is a different map to learn, and everyone playing that day has the same one. The trail of six dates out of the camp, the first jerrycan, and every ramp, hoop and boost strip stay where they are. If the game is left open past midnight the new day is dealt between runs, never during one.
+- **Fuel:** there are only 10 jerrycans in the whole reserve, well apart, so fuel has to be looked for on the map, and three fuel stops (see the places above).
+- **Today's sand:** the 180 lines of dates and 9 of the 10 jerrycans are placed from the date, so every day is a different map to learn, and everyone playing that day has the same one. The trail of six dates out of the camp, the first jerrycan, and every ramp, hoop and boost strip stay where they are. If the game is left open past midnight the new day is dealt between runs, never during one.
 
 ## Stunts
 
@@ -94,8 +103,8 @@ What keeps a run worth starting once every postcard is found:
 
 - **Missions:** dealt at random from 42 kinds, three at a time, a fourth from level 4 and a fifth from level 8. The first three are on the screen all through a run, each as a bar that fills. A finished one is ticked, then replaced a moment later in the same run by a new one that counts from that moment, and every third mission finished in one run pays a bonus. A replacement is never a kind you just had, and the set is spread over six categories: collecting (dates, dates in the first minute, jerrycans, dirhams earned, golden dates, dates in the oasis belt), driving (distance, distance without rolling, top speed, distance from the camp, boost strips, distance in the Empty Quarter), stunts (air time, one long jump, drift points, one big drift, donuts, two wheels in total and in one go, flips, spins, stunt points, combo, ramps, hoops, drift points on the salt plain, air time in the Moreeb dunes), exploring (places visited, drive to a named place, reach one against the clock, a delivery between two places, the Tal Moreeb summit, find the sand gazelles, regions driven in, a share of the map uncovered), races (finish one, win a medal) and five that add up over several runs.
 - **Harder with level:** targets grow with your level up to a cap; each mission is one, two or three stars, and three-star missions go from about 1 in 12 at level 1 to nearly half from level 14 (an easy one is set as if two levels lower, a hard one four higher, and pays half as much again); and from level 5 some carry a twist: do it without rolling. A mission you do not fancy can be swapped in the Missions sheet for a few dirhams. The table of kinds is `MK` in `js/game.js`.
-- **Levels:** missions, postcards, races and every run give experience; each level needs more than the last (125, 190, 265 … ). Each level pays dirhams, tops up the tank if it comes mid-run, and moves you up five ranks from Beginner to Desert falcon. Most levels open something: races at 2, 4, 5 and 7, the pickup at 3, a fourth mission at 4, the sand buggy at 6, a fifth mission at 8, the monster truck at 10. The results card and the Missions sheet always show the bar and the next thing it unlocks.
-- **Races:** drive through places in order against the clock for bronze, silver and gold. Five fixed races unlock by level, from half a minute to about two minutes long, and a race of the day changes daily: a tour of four places near each other. Gold needs a clean drive: the medal times are set from a pace of 160, 220 and 285 pixels a second, and a straight drive in the first car holds about 330. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
+- **Levels:** missions, postcards, races and every run give experience; each level needs more than the last (125, 190, 265 … ). Each level pays dirhams, tops up the tank if it comes mid-run, and moves you up five ranks from Beginner to Desert falcon. Most levels open something: races at 2, 3, 4, 5, 7, 9, 11 and 12, the pickup at 3, a fourth mission at 4, the sand buggy at 6, a fifth mission at 8, the monster truck at 10. The results card and the Missions sheet always show the bar and the next thing it unlocks.
+- **Races:** drive through places in order against the clock for bronze, silver and gold. Nine fixed races unlock by level: five from the start of the game's levels (1, 2, 4, 5, 7), the Tal Moreeb hill climb at 3, a sprint from the grandstand to the summit with medal times set by hand, and three through the outer places at levels 9, 11 and 12. A race of the day changes daily: a tour of four places near each other. Gold needs a clean drive: medal times come from a pace of 160, 220 and 285 pixels a second, adjusted for the ground the route crosses (faster over the salt, slower in the Empty Quarter), and a straight drive in the first car holds about 330 on the home sands. A place not yet found shows as ??? in a race's route, and driving the race finds it. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
 - **Daily gift:** dirhams for the first visit each day, growing over seven days in a row. The same note tells a returning player that the sand has been dealt afresh.
 - **Upgrades:** engine, tyres, balance, tank and date basket, five levels each (100, 250, 500, 900, 1,500).
 

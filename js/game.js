@@ -50,7 +50,11 @@ const SITES = [
   { id: 'fort', x: 4800, y: 900, r: 240 }, { id: 'camels', x: -2100, y: 3000, r: 230 }, { id: 'oryx', x: 2600, y: 2400, r: 180 },
   { id: 'falcon', x: -5000, y: 2200, r: 150 }, { id: 'well', x: 700, y: -1000, r: 170 }, { id: 'sabkha', x: -800, y: -4300, r: 700 },
   { id: 'festival', x: -3700, y: 300, r: 230 }, { id: 'gate', x: 700, y: 3600, r: 170 },
+  // seven more, further out, each in the region it belongs to. They come last so the numbers of the first eleven on the map never change.
+  { id: 'roses', x: -1600, y: -5600, r: 170 }, { id: 'stands', x: 2900, y: -2500, r: 200 }, { id: 'tower', x: 5600, y: -2200, r: 150 }, { id: 'farcamp', x: 1500, y: 5600, r: 230 },
+  { id: 'track', x: -3100, y: 4700, r: 300 }, { id: 'farm', x: -5500, y: -1700, r: 280 }, { id: 'village', x: -2900, y: -2300, r: 260 },
 ];
+const REST = { camp: 1, well: 1, farcamp: 1 }; // where a tank is topped up, once a run each: the two camps and the old well
 for (const s of SITES) { s.f2 = s.r * s.r; s.coins = Math.round(10 + Math.hypot(s.x, s.y) / 100); } // the further out a place is, the more its postcard pays
 const site = id => SITES.find(s => s.id === id);
 const fogAt = (x, y) => { const i = Math.floor((x + FOG_O) / FOG_C), j = Math.floor((y + FOG_O) / FOG_C); return i >= 0 && i < FOG_N && j >= 0 && j < FOG_N && FOG[j * FOG_N + i] === 1; }; // has this point been uncovered
@@ -666,6 +670,47 @@ function aSummit(c) {
   for (let j = 0; j < 3; j++) for (let i = 0; i < 4; i++) { c.fillStyle = (i + j) % 2 ? '#fffaf0' : SHEMAGH; c.fillRect(2 + i * 9, -74 + j * 8, 9, 8); } c.strokeRect(2, -74, 36, 24);
   c.fillStyle = '#e0a72a'; c.beginPath(); c.arc(0, -76, 3, 0, TAU); fs(c);
 }
+function aRose(c) { // a desert rose: blades of sand-coloured crystal standing in a rosette
+  ink(c, 1.4);
+  for (const [x, y, w, h, a, col] of [[-16, -2, 13, 9, -0.5, '#c79a72'], [14, -3, 14, 10, 0.5, '#d2a67c'], [-6, -8, 13, 12, -0.25, '#e0b88c'], [8, -9, 12, 12, 0.3, '#d9ad82'], [1, -3, 15, 9, 0, '#ecc9a0'], [0, -15, 9, 10, 0.05, '#e6c096']]) { c.fillStyle = col; c.beginPath(); c.ellipse(x, y, w, h, a, Math.PI, 0); c.closePath(); fs(c); }
+  c.strokeStyle = 'rgba(255,250,240,.7)'; c.lineWidth = 1.2; c.beginPath(); c.arc(1, -3, 10, 3.6, 4.6); c.stroke(); c.beginPath(); c.arc(-6, -9, 8, 3.7, 4.5); c.stroke();
+}
+function aStands(c) { // the grandstand at the foot of Tal Moreeb: three tiers of benches under a striped awning, and a crowd
+  ink(c); c.strokeStyle = '#6b4a2b'; c.lineWidth = 3; c.beginPath(); c.moveTo(-64, 0); c.lineTo(-64, -76); c.moveTo(64, 0); c.lineTo(64, -76); c.stroke(); ink(c);
+  for (let i = 0; i < 3; i++) { c.fillStyle = ['#8a5a34', '#9a6a3c', '#a8784a'][i]; c.beginPath(); c.roundRect(-60 + i * 6, -16 - i * 14, 120 - i * 12, 16, 2); fs(c); }
+  for (let i = 0; i < 3; i++) for (let k = 0; k < 6 - i; k++) { c.fillStyle = (k + i) % 3 ? '#fffaf0' : SHEMAGH; c.beginPath(); c.arc(-44 + i * 8 + k * (17.5 - i * 0.6), -22 - i * 14, 5, 0, TAU); fs(c); } // heads in white ghutra and red shemagh
+  for (let i = 0; i < 8; i++) { c.fillStyle = i % 2 ? '#fffaf0' : SHEMAGH; c.beginPath(); c.moveTo(-72 + i * 18, -78); c.lineTo(-54 + i * 18, -78); c.lineTo(-54 + i * 18, -64); c.quadraticCurveTo(-63 + i * 18, -56, -72 + i * 18, -64); c.closePath(); fs(c); }
+  c.fillStyle = '#1f7a74'; c.beginPath(); c.roundRect(-74, -84, 148, 8, 3); fs(c);
+}
+function aArch(c) { // a start and finish arch: two posts and a chequered banner
+  ink(c); c.fillStyle = '#8a5a34'; for (const x of [-70, 62]) { c.beginPath(); c.roundRect(x, -84, 8, 84, 3); fs(c); }
+  for (let j = 0; j < 2; j++) for (let i = 0; i < 14; i++) { c.fillStyle = (i + j) % 2 ? '#fffaf0' : INK; c.fillRect(-70 + i * 10, -98 + j * 9, 10, 9); } ink(c); c.strokeRect(-70, -98, 140, 18);
+}
+function aTower(c) { // a mud-brick watchtower, round and tapering, with a flag for whoever is on lookout
+  ink(c); c.fillStyle = '#e3b271'; c.beginPath(); c.moveTo(-26, 0); c.lineTo(-19, -104); c.lineTo(-22, -110); c.lineTo(-22, -120); for (let x = -22; x < 22; x += 11) { c.lineTo(x, -128); c.lineTo(x + 5.5, -128); c.lineTo(x + 5.5, -120); c.lineTo(x + 11, -120); } c.lineTo(22, -110); c.lineTo(19, -104); c.lineTo(26, 0); c.closePath(); fs(c);
+  c.fillStyle = 'rgba(255,255,255,.2)'; c.beginPath(); c.moveTo(-20, -4); c.lineTo(-15, -102); c.lineTo(-8, -102); c.lineTo(-11, -4); c.closePath(); c.fill(); c.fillStyle = 'rgba(120,70,30,.18)'; c.fillRect(-25, -22, 50, 22);
+  c.strokeStyle = 'rgba(43,26,18,.35)'; c.lineWidth = 1.1; c.beginPath(); c.moveTo(-20, -104); c.lineTo(20, -104); c.moveTo(-23, -60); c.lineTo(23, -60); c.stroke(); ink(c);
+  c.fillStyle = '#4a2d18'; c.beginPath(); c.roundRect(-7, -22, 14, 22, [7, 7, 0, 0]); fs(c); for (const [x, y] of [[-4, -88], [6, -50], [-9, -42]]) { c.beginPath(); c.roundRect(x, y, 6, 11, 3); fs(c); }
+  c.strokeStyle = '#6b4a2b'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(0, -126); c.lineTo(0, -160); c.stroke(); uaeFlag(c, 0, -160, 26, 14);
+}
+function aDrum(c) { // fuel drums with a jerrycan on top: the sign that a tank can be filled here
+  ink(c); for (const [x, col] of [[-13, SHEMAGH], [13, '#1f7a74']]) { c.fillStyle = col; c.beginPath(); c.roundRect(x - 11, -30, 22, 30, 3); fs(c); c.strokeStyle = 'rgba(43,26,18,.45)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - 11, -20); c.lineTo(x + 11, -20); c.moveTo(x - 11, -10); c.lineTo(x + 11, -10); c.stroke(); ink(c); c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(x - 8, -28, 4, 26); }
+  c.save(); c.translate(0, -31); aCan(c); c.restore();
+}
+function aHouse(c) { // a mud-brick house: roof beams poking through the wall, a teal door, two shuttered windows
+  ink(c); c.fillStyle = '#e3b271'; c.beginPath(); c.moveTo(-46, 0); c.lineTo(-46, -50); c.lineTo(-40, -50); c.lineTo(-40, -56); c.lineTo(-30, -56); c.lineTo(-30, -50); c.lineTo(30, -50); c.lineTo(30, -56); c.lineTo(40, -56); c.lineTo(40, -50); c.lineTo(46, -50); c.lineTo(46, 0); c.closePath(); fs(c);
+  c.fillStyle = 'rgba(120,70,30,.18)'; c.fillRect(-45, -16, 90, 16);
+  c.strokeStyle = '#6b4a2b'; c.lineWidth = 3; c.beginPath(); for (const x of [-34, -12, 10, 32]) { c.moveTo(x, -46); c.lineTo(x, -41); } c.stroke(); ink(c);
+  c.fillStyle = '#1f7a74'; c.beginPath(); c.roundRect(-9, -30, 18, 30, [9, 9, 0, 0]); fs(c); c.fillStyle = '#e0a72a'; c.beginPath(); c.arc(4, -14, 1.5, 0, TAU); c.fill();
+  for (const x of [-34, 24]) { c.fillStyle = '#4a2d18'; c.beginPath(); c.roundRect(x, -36, 10, 13, 2); fs(c); c.strokeStyle = '#e3b271'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + 5, -36); c.lineTo(x + 5, -23); c.moveTo(x, -29.5); c.lineTo(x + 10, -29.5); c.stroke(); ink(c); }
+}
+function aBarjeel(c) { // a house with a wind tower, the barjeel that catches the breeze and sends it down into the room
+  ink(c); c.fillStyle = '#d8a25f'; c.beginPath(); c.roundRect(-40, -44, 80, 44, 2); fs(c); c.fillStyle = 'rgba(120,70,30,.18)'; c.fillRect(-39, -14, 78, 14);
+  c.fillStyle = '#e3b271'; c.beginPath(); c.rect(4, -112, 30, 68); fs(c); c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(6, -110, 4, 64);
+  c.fillStyle = '#4a2d18'; for (const x of [11, 21]) { c.beginPath(); c.roundRect(x, -104, 7, 32, 3); fs(c); }
+  c.fillStyle = '#c98f4f'; c.beginPath(); c.roundRect(0, -118, 38, 8, 2); fs(c);
+  c.fillStyle = '#1f7a74'; c.beginPath(); c.roundRect(-30, -28, 16, 28, [8, 8, 0, 0]); fs(c); c.fillStyle = '#4a2d18'; c.beginPath(); c.roundRect(12, -30, 12, 14, 2); fs(c);
+}
 function aSign(c) { ink(c); c.fillStyle = '#8a5a34'; c.beginPath(); c.roundRect(-2.5, -34, 5, 34, 2); fs(c); c.fillStyle = '#fffaf0'; c.beginPath(); c.moveTo(-18, -44); c.lineTo(14, -44); c.lineTo(22, -37); c.lineTo(14, -30); c.lineTo(-18, -30); c.closePath(); fs(c);
   c.strokeStyle = '#1f7a74'; c.lineWidth = 2; c.beginPath(); c.moveTo(-12, -37); c.lineTo(10, -37); c.stroke(); }
 function aTrough(c) { ink(c); c.fillStyle = '#8a5a34'; c.beginPath(); c.moveTo(-30, -16); c.lineTo(30, -16); c.lineTo(24, 0); c.lineTo(-24, 0); c.closePath(); fs(c); c.fillStyle = '#4f8fa8'; c.beginPath(); c.ellipse(0, -16, 29, 4, 0, 0, TAU); fs(c); }
@@ -682,6 +727,8 @@ const KIND = {
   palm: [aPalm, [-44, -124, 98, 128], 9], tent: [aTent, [-104, -64, 208, 68], 60], fire: [aFire, [-18, -30, 60, 36], 14], fort: [aFort, [-100, -136, 196, 140], 84],
   ghaf: [aGhaf, [-52, -82, 104, 86], 10], perch: [aPerch, [-18, -100, 38, 104], 9], well: [aWell, [-34, -64, 68, 76], 28], stall: [aStall, [-74, -76, 148, 80], 58],
   gate: [aGate, [-86, -116, 172, 120], 0], summit: [aSummit, [-6, -82, 50, 86], 5], sign: [aSign, [-22, -48, 48, 52], 5], trough: [aTrough, [-34, -24, 68, 28], 26],
+  rose: [aRose, [-34, -30, 68, 34], 12], stands: [aStands, [-78, -88, 156, 92], 56], arch: [aArch, [-74, -102, 148, 106], 0], tower: [aTower, [-30, -164, 60, 168], 24],
+  drum: [aDrum, [-28, -64, 56, 68], 16], house: [aHouse, [-50, -60, 100, 64], 40], barjeel: [aBarjeel, [-44, -122, 88, 126], 36],
   basket: [aBasket, [-18, -28, 36, 32], 12], shrub: [aShrub, [-18, -24, 36, 28], 0], post: [aPost, [-6, -34, 28, 38], 0], flag: [aFlag, [-6, -96, 48, 100], 4],
   baba: [c => person(c, 0, 0, 0.6, BABA), [-58, -102, 96, 108], 13], date: [aDate, [-9, -12, 18, 24], 0], can: [aCan, [-12, -30, 24, 34], 0],
   camel: [aCamel, [-42, -122, 112, 128], 26], oryx: [aOryx, [-36, -138, 86, 144], 20], gazelle: [aGazelle, [-26, -86, 58, 90], 11],
@@ -714,6 +761,15 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
   q = site('sabkha'); P('sign', q.x, q.y);
   q = site('festival'); P('stall', q.x, q.y - 30); P('palm', q.x - 122, q.y - 8); P('palm', q.x + 126, q.y, 1); P('basket', q.x + 44, q.y + 44); P('basket', q.x - 34, q.y + 54);
   q = site('gate'); P('gate', q.x, q.y); PROPS.push({ kind: 'post', x: q.x - 70, y: q.y, rad: 7, hide: 1 }, { kind: 'post', x: q.x + 70, y: q.y, rad: 7, hide: 1 });
+  const arch = (x, y) => { P('arch', x, y); PROPS.push({ kind: 'post', x: x - 66, y, rad: 7, hide: 1 }, { kind: 'post', x: x + 66, y, rad: 7, hide: 1 }); }; // only its two posts are solid
+  q = site('camp'); P('drum', q.x - 232, q.y + 40); q = site('well'); P('drum', q.x - 76, q.y + 14); // fuel drums mark the three places that fill the tank
+  q = site('roses'); P('rose', q.x, q.y); for (let k = 0; k < 7; k++) { const a = k / 7 * TAU + 0.4, d = 52 + (k % 3) * 34; P('rose', q.x + Math.cos(a) * d, q.y + Math.sin(a) * d * 0.75, k % 2); }
+  q = site('stands'); P('stands', q.x - 20, q.y - 50); P('flag', q.x - 128, q.y - 40); arch(q.x + 96, q.y + 70);
+  q = site('tower'); P('tower', q.x, q.y - 10); P('palm', q.x - 78, q.y + 18, 1);
+  q = site('farcamp'); P('tent', q.x, q.y + 70); P('fire', q.x + 104, q.y - 30); P('drum', q.x - 118, q.y - 16); P('flag', q.x - 100, q.y + 44); P('palm', q.x + 146, q.y + 66, 1); // the tent stands on the far side: nearly everyone arrives from the north
+  q = site('track'); arch(q.x, q.y - 104); P('trough', q.x - 30, q.y + 24); P('palm', q.x + 44, q.y + 30); P('flag', q.x - 96, q.y + 6);
+  q = site('farm'); P('house', q.x - 150, q.y - 120); P('basket', q.x - 96, q.y - 84); P('basket', q.x - 150, q.y - 60); for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) P('palm', q.x - 40 + i * 110, q.y - 60 + j * 100, (i + j) % 2);
+  q = site('village'); P('barjeel', q.x, q.y - 126); P('house', q.x - 134, q.y - 36); P('house', q.x + 126, q.y - 60, 1); P('palm', q.x + 66, q.y + 64); P('basket', q.x - 62, q.y + 30); P('well', q.x - 6, q.y + 74);
   for (let k = 0; k < 340; k++) { const a = k / 340 * TAU; P('post', Math.cos(a) * (R + 12), Math.sin(a) * (R + 12)); } // the ring of flags round the reserve
   // How much of each thing a region gets, in the order of REG, against 1 for the home sands: lines of dates, jerrycans, the golden dates
   // that move each day, and shrubs. The oasis belt is rich in dates, the Empty Quarter is short of fuel and long on gold, nothing grows on the salt.
@@ -724,7 +780,7 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
     if (hash2(i, j + 99) < 0.3 * dens(x, y, D_SHRUB) && clear(0)) P('shrub', x, y, hash2(i, j) > 0.5);
     else if (RW[5] > 0.75 && hash2(i + 31, j - 17) < 0.2 && clear(120)) P('palm', x, y, hash2(i, j) > 0.5);
   }
-  // What is scattered on the sand: 180 lines of dates curving across the dunes, and 12 jerrycans a long way apart, a few more of them
+  // What is scattered on the sand: 180 lines of dates curving across the dunes, and 10 jerrycans a long way apart, a few more of them
   // towards the middle than out by the rim. Fuel has to be looked for on the map. The first jerrycan is always in the same place near
   // the camp, so a first run can always reach one.
   const scatter = r => { const dates = [], cans = [{ x: 540, y: -280 }];
@@ -733,8 +789,8 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
       const bend = (r() - 0.5) * 0.3, n = 5 + (r() * 3 | 0); let an = r() * TAU;
       for (let i = 0; i < n; i++) { if (Math.hypot(x, y) < R - 120) dates.push({ x, y }); an += bend; x += Math.cos(an) * 48; y += Math.sin(an) * 48; }
     }
-    for (let tries = 0; cans.length < 12 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.pow(r(), 0.7) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
-      if (r() * 1.2 < dens(x, y, D_CAN) && cans.every(o => Math.hypot(o.x - x, o.y - y) > 2400) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
+    for (let tries = 0; cans.length < 10 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.pow(r(), 0.7) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
+      if (r() * 1.2 < dens(x, y, D_CAN) && cans.every(o => Math.hypot(o.x - x, o.y - y) > 2700) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
     return { dates, cans }; };
   // The dates and jerrycans are dealt afresh every day (dealDay, below). The playground has its own fixed stream of numbers, so it never moves.
   const r = rng(20261119);
@@ -771,7 +827,7 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
   dealDay();
   const herd = (kind, id, n, spread) => { const s = typeof id === 'string' ? site(id) : id; for (let k = 0; k < n; k++) { const a = k / n * TAU + 0.6, x = s.x + Math.cos(a) * spread, y = s.y + Math.sin(a) * spread * 0.7;
     ANIMALS.push({ kind, x, y, hx: s.x, hy: s.y, tx: x, ty: y, ph: k, dir: k % 2 ? 1 : -1, wait: 1 + k, run: 0, rx: 0, ry: 0, rad: KIND[kind][2] }); } };
-  herd('camel', 'camels', 5, 130); herd('oryx', 'oryx', 4, 110);
+  herd('camel', 'camels', 5, 130); herd('oryx', 'oryx', 4, 110); herd('camel', 'track', 4, 185); // racing camels round their track
   herd('gazelle', { x: 1750, y: -330 }, 5, 90); herd('gazelle', { x: -1480, y: -1480 }, 4, 80); herd('gazelle', { x: -200, y: 950 }, 3, 70); herd('camel', { x: 1250, y: 380 }, 2, 60); // loose herds out on the sand
   herd('gazelle', { x: -3000, y: 1700 }, 5, 90); herd('gazelle', { x: 2300, y: -2300 }, 4, 80); herd('gazelle', { x: 900, y: 4800 }, 4, 80); herd('gazelle', { x: -1900, y: -3000 }, 4, 80); herd('camel', { x: -3300, y: -700 }, 3, 70); herd('oryx', { x: 3900, y: 1900 }, 3, 80); // and further out
   herd('oryx', { x: -3600, y: 2900 }, 4, 90); herd('gazelle', { x: -2600, y: 4400 }, 5, 90); herd('camel', { x: -4600, y: 3300 }, 3, 70); // the gravel plain is where the animals are
@@ -822,7 +878,7 @@ function ring(x, y, col, r = 16) { rings.push({ x, y, r, life: 1, col }); if (ri
 const UPS = ['engine', 'tyres', 'balance', 'tank', 'magnet'], UP_COST = [100, 250, 500, 900, 1500];
 const xpNeed = l => 70 + 50 * l + 5 * l * l, RANKS = [1, 3, 6, 10, 15];
 // what each level opens. The next one is always on show, on the results card and the missions sheet, so there is something to play for.
-const UNLOCKS = [[2, 'un_race'], [3, 't_pickup'], [4, 'un_slot'], [5, 'un_race'], [6, 't_buggy'], [7, 'un_grand'], [8, 'un_slot'], [10, 't_monster']];
+const UNLOCKS = [[2, 'un_race'], [3, 't_pickup'], [4, 'un_slot'], [5, 'un_race'], [6, 't_buggy'], [7, 'un_grand'], [8, 'un_slot'], [9, 'un_race'], [10, 't_monster'], [11, 'un_race'], [12, 'un_race']];
 const nextUnlock = () => { const u = UNLOCKS.find(q => q[0] > save.lvl); return u ? T('unNext', u[0], T(u[1])) : ''; };
 function rankRow(top) { // rank, level, a bar of experience towards the next level
   const mkEl = (tag, txt) => { const e = document.createElement(tag); if (txt !== undefined) e.textContent = txt; return e; }, bar = mkEl('div'), fill = mkEl('i'); bar.className = 'pbar'; fill.style.width = Math.round(save.xp / xpNeed(save.lvl) * 100) + '%'; bar.append(fill);
@@ -1008,6 +1064,8 @@ const RACES = [
   { id: 'camp', lvl: 1, pts: ['camp', 'well', 'festival', 'camp'] }, { id: 'oasis', lvl: 2, pts: ['camp', 'festival', 'oasis', 'falcon'] },
   { id: 'moreeb', lvl: 4, pts: ['well', 'moreeb', 'fort'] }, { id: 'south', lvl: 5, pts: ['fort', 'oryx', 'gate', 'camels'] },
   { id: 'grand', lvl: 7, pts: ['camp', 'moreeb', 'fort', 'oryx', 'gate', 'camels', 'falcon', 'oasis', 'sabkha', 'camp'] },
+  { id: 'climb', lvl: 3, pts: ['stands', 'moreeb'], tg: [8, 6, 4.8] }, // the hill climb: from the grandstand to the top of Tal Moreeb. Too short for a pace, so its medal times are set by hand.
+  { id: 'salt', lvl: 9, pts: ['sabkha', 'roses', 'village', 'sabkha'] }, { id: 'east', lvl: 11, pts: ['stands', 'moreeb', 'tower', 'fort'] }, { id: 'far', lvl: 12, pts: ['gate', 'farcamp', 'track', 'camels'] },
 ];
 function dailyRace() {
   const d = dayKey(); let h = 7; for (const ch of d) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0;
@@ -1017,7 +1075,10 @@ function dailyRace() {
 }
 const raceKey = rc => rc.key || rc.id, reach = s => s.hill ? 130 : s.r + 50;
 function raceLen(rc) { let L = 0; for (let i = 1; i < rc.pts.length; i++) { const a = site(rc.pts[i - 1]), b = site(rc.pts[i]); L += Math.hypot(a.x - b.x, a.y - b.y); } return L; }
-const raceTargets = rc => { const L = raceLen(rc), k = 3 + rc.pts.length; return [L / 160 + k, L / 220 + k, L / 285 + k]; }; // bronze, silver, gold, in seconds: a pace, plus time to get going and to turn at each place. A clean straight drive in the first car, with nothing upgraded, holds about 330.
+// How fast each region's ground lets a car go, against 1 for the home sands (measured with a car driven straight): a race is timed for the ground it crosses.
+const G_PACE = [1, 1.3, 0.95, 0.86, 1.1, 0.97];
+function raceEff(rc) { let L = 0; for (let i = 1; i < rc.pts.length; i++) { const a = site(rc.pts[i - 1]), b = site(rc.pts[i]); let inv = 0; for (let k = 0; k < 8; k++) { region(a.x + (b.x - a.x) * (k + 0.5) / 8, a.y + (b.y - a.y) * (k + 0.5) / 8); for (let r = 0; r < 6; r++) inv += RW[r] / G_PACE[r]; } L += Math.hypot(a.x - b.x, a.y - b.y) * inv / 8; } return L; }
+const raceTargets = rc => { if (rc.tg) return rc.tg; const L = raceEff(rc), k = 3 + rc.pts.length; return [L / 160 + k, L / 220 + k, L / 285 + k]; }; // bronze, silver, gold, in seconds: a pace over the route's ground, plus time to get going and to turn at each place. A clean straight drive in the first car, with nothing upgraded, holds about 330 on the home sands.
 const GH_KEY = 'abood-liwa-ghost2'; let ghosts = {}; // 2: ghosts of the bigger map
 try { ghosts = JSON.parse(localStorage.getItem(GH_KEY) || '{}') || {}; } catch (e) {}
 function finishRace() {
@@ -1211,6 +1272,8 @@ function update(dt) {
   for (const s of SITES) { const dx = s.x - car.x, dy = s.y - car.y, rr = reach(s); if (dx * dx + dy * dy >= rr * rr) continue; cur = s.id;
     if (!run.seen[s.id]) { run.seen[s.id] = 1; run.seenT[s.id] = run.t; if (!save.cards.includes(s.id)) { save.cards.push(s.id); save.coins += s.coins; run.cards.push(s.id); addXP(30); persist(); coinsUI(); play('zone'); note(T('found', T('s_' + s.id), s.coins), 'card', 3.2); } } }
   if (cur !== run.cur) { run.cur = cur; if (cur) { run.vis.push(cur); if (run.vis.length > 60) run.vis.shift(); } } // the order places were entered, for delivery missions
+  // The two camps and the old well each put 40% of a tank back, once a run. They wait until there is room for all of it, so driving past with fuel to spare does not use one up.
+  if (REST[cur] && !run.rest[cur] && !run.race && !run.tut && run.fuel < run.max * 0.6) { run.rest[cur] = 1; run.fuel += run.max * 0.4; run.low = false; play('power', 0.9); buzz(30); float(car.x, car.y - 110, T('canPlus'), '#bff0c0'); note(T('rest', T('s_' + cur)), 'baba', 3); }
   run.mt -= dt; if (run.mt <= 0) { run.mt = 0.25; checkMissions(); misHud();
     // which region the car is in. Crossing into another one is announced by name. A postcard, a finished mission or a new level is left to be read first; anything slighter gives way.
     const rg = regAt(car.x, car.y); if (RW[rg] > 0.6 && rg !== run.reg) { run.reg = rg; if (!run.regs[rg]) { run.regs[rg] = 1; run.regN++; } if (!run.tut && !run.race && run.t > 2) run.regNote = rg; }
@@ -1305,6 +1368,16 @@ function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under 
     for (let i = 0; i < 3; i++) { const k = 0.5 + 0.5 * Math.sin(t * 9 - i * 1.3), x = -30 + i * 26; c.beginPath(); c.moveTo(x - 10, -22); c.lineTo(x + 10, 0); c.lineTo(x - 10, 22);
       c.strokeStyle = INK; c.lineWidth = 12; c.stroke(); c.strokeStyle = `rgb(255,${150 + 90 * k | 0},${60 + 120 * k | 0})`; c.lineWidth = 7; c.stroke(); }
     c.restore(); }
+  s = site('track');
+  if (s.x > x0 - 300 && s.x < x1 + 300 && s.y > y0 - 300 && s.y < y1 + 300) { // the camel track: an oval of raked sand between two white rails
+    c.strokeStyle = 'rgba(120,84,50,.32)'; c.lineWidth = 58; c.beginPath(); c.ellipse(s.x, s.y + 10, 200, 112, 0, 0, TAU); c.stroke();
+    c.strokeStyle = 'rgba(255,250,240,.85)'; c.lineWidth = 3; c.setLineDash([14, 10]); c.beginPath(); c.ellipse(s.x, s.y + 10, 231, 143, 0, 0, TAU); c.stroke(); c.beginPath(); c.ellipse(s.x, s.y + 10, 169, 81, 0, 0, TAU); c.stroke(); c.setLineDash([]);
+  }
+  s = site('farm');
+  if (s.x > x0 - 320 && s.x < x1 + 320 && s.y > y0 - 320 && s.y < y1 + 320) { // the date farm: a watered field, and a falaj channel along each row of palms
+    c.fillStyle = 'rgba(96,150,70,.42)'; c.beginPath(); c.roundRect(s.x - 86, s.y - 104, 318, 296, 34); c.fill();
+    c.strokeStyle = 'rgba(63,147,173,.75)'; c.lineWidth = 5; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); for (let j = 0; j < 3; j++) { c.moveTo(s.x - 70, s.y - 34 + j * 100); c.lineTo(s.x + 214, s.y - 34 + j * 100); } c.moveTo(s.x - 70, s.y - 34); c.lineTo(s.x - 70, s.y + 166); c.stroke();
+  }
   s = site('camp');
   if (s.x > x0 - 200 && s.x < x1 + 200 && s.y > y0 - 200 && s.y < y1 + 200) { // the sadu rug in front of the tent
     c.save(); c.translate(s.x, s.y - 20); c.fillStyle = SHEMAGH; c.strokeStyle = INK; c.lineWidth = 1.6; c.beginPath(); c.roundRect(-56, -22, 112, 44, 4); c.fill(); c.stroke();
@@ -1412,7 +1485,8 @@ function drawMap(cnv, big) { // big: the whole reserve, for the map sheet. Other
   g.font = `800 ${Math.round(big ? 9 * u : 12 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
   SITES.forEach((s, i) => { const on = save.cards.includes(s.id), home = !big && s.id === 'camp', r = (big ? 7 : 7.5) * u; if (!on && !save.spot.includes(s.id) && s.id !== 'camp') return; if (!home && !seen(s.x, s.y)) return; const q = home ? rim(s.x, s.y) : [px(s.x), py(s.y), 0]; // a place is on the maps once it has been found, or come near; the camp never leaves the round map
     g.fillStyle = on ? '#1f7a74' : '#d9b57f'; g.strokeStyle = q[2] ? '#fffaf0' : INK; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(q[0], q[1], q[2] ? r * 0.8 : r, 0, TAU); g.fill(); g.stroke();
-    g.fillStyle = on ? '#fffaf0' : INK; g.fillText(!on ? '?' : big ? String(i + 1) : '', q[0], q[1] + 0.5 * u); });
+    g.fillStyle = on ? '#fffaf0' : INK; g.fillText(!on ? '?' : big ? String(i + 1) : '', q[0], q[1] + 0.5 * u);
+    if (live && on && REST[s.id] && !run.rest[s.id] && !run.race) { g.fillStyle = SHEMAGH; g.strokeStyle = '#fffaf0'; g.lineWidth = 1.2 * u; g.beginPath(); g.arc(q[0] + r * 0.8, q[1] - r * 0.8, 3.2 * u, 0, TAU); g.fill(); g.stroke(); } }); // a red dot: this place can still fill the tank
   if (big) { const names = T('reg'); g.font = `800 ${Math.round(8 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; // the five regions by name, each in the middle of its slice
     [[350, 5600], [65, 5000], [155, 5000], [230, 5000], [300, 5200]].forEach(([b, d], i) => { const a = b * Math.PI / 180, x = px(Math.sin(a) * d), y = py(-Math.cos(a) * d); g.lineWidth = 3 * u; g.strokeStyle = 'rgba(255,250,240,.8)'; g.strokeText(names[i + 1], x, y); g.fillStyle = INK; g.fillText(names[i + 1], x, y); }); }
   if (run.race && live && run.ri < run.race.pts.length) { // the race route still to drive
@@ -1468,7 +1542,7 @@ function showMenu() {
 function startRun(rc, lesson) { // rc: a race to drive, or nothing for a free safari. lesson: give the first lesson again, asked for from How to play
   unlockAudio(); st = 'play'; newDay(); resetCar(); resetWorld();
   const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl });
-  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0, reg: 0, regs: { 0: 1 }, regN: 1, regNote: -1, rDist: 0, rAir: 0, rDrift: 0, rDates: 0, fogNew: 0, rum: 0,
+  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0, reg: 0, regs: { 0: 1 }, regN: 1, regNote: -1, rDist: 0, rAir: 0, rDrift: 0, rDates: 0, fogNew: 0, rum: 0, rest: {},
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   run.tut = !rc && (lesson || !save.tut) ? { i: 0, ok: 0, d0: 0, r0: 0, f0: 0 } : null; tutKey = ''; show('tut', !!run.tut); if (run.tut) tutHud(0, 0);
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
@@ -1510,7 +1584,7 @@ let sheetId = null;
 function siteIcon(cnv, id) {
   const g = cnv.getContext('2d'), S = cnv.width; g.setTransform(1, 0, 0, 1, 0, 0);
   const sky = g.createLinearGradient(0, 0, 0, S); sky.addColorStop(0, '#fbeccd'); sky.addColorStop(0.62, '#f6d6a0'); sky.addColorStop(0.63, '#e3ad68'); sky.addColorStop(1, '#d09556'); g.fillStyle = sky; g.fillRect(0, 0, S, S);
-  const main = { camp: 'tent', oasis: 'palm', fort: 'fort', camels: 'camel', oryx: 'oryx', falcon: 'perch', well: 'well', festival: 'stall', gate: 'gate', moreeb: 'summit', sabkha: 'sign' }[id];
+  const main = { camp: 'tent', oasis: 'palm', fort: 'fort', camels: 'camel', oryx: 'oryx', falcon: 'perch', well: 'well', festival: 'stall', gate: 'gate', moreeb: 'summit', sabkha: 'sign', roses: 'rose', stands: 'stands', tower: 'tower', farcamp: 'drum', track: 'arch', farm: 'house', village: 'barjeel' }[id];
   if (id === 'moreeb') { g.fillStyle = '#e9b872'; g.strokeStyle = INK; g.lineWidth = S / 60; g.beginPath(); g.moveTo(-4, S * 0.86); g.quadraticCurveTo(S * 0.4, S * 0.2, S * 0.62, S * 0.34); g.quadraticCurveTo(S * 0.8, S * 0.6, S + 4, S * 0.8); g.lineTo(S + 4, S + 4); g.lineTo(-4, S + 4); g.closePath(); g.fill(); g.stroke(); }
   if (id === 'sabkha') { g.fillStyle = '#efe6d6'; g.beginPath(); g.ellipse(S / 2, S * 0.8, S * 0.44, S * 0.13, 0, 0, TAU); g.fill(); }
   const e = main === 'camel' || main === 'oryx' ? spr(main, 0) : spr(main), k = Math.min(S * 0.8 / e.w, S * (id === 'moreeb' ? 0.4 : 0.72) / e.h);
@@ -1568,7 +1642,7 @@ function openSheet(id) {
   } else if (id === 'races') {
     body.append(el('p', 'label', T('raceNote')));
     for (const rc of [dailyRace(), ...RACES]) { const key = raceKey(rc), tg = raceTargets(rc), med = save.medals[key] || 0, best = save.times[key], locked = save.lvl < rc.lvl, row = el('div', 'rrow' + (rc.id === 'daily' ? ' daily' : ''));
-      const info = el('div', 'rinfo'), tm = el('div', 'rtimes'); info.append(el('b', '', T('r_' + rc.id)), el('small', '', rc.pts.map(id => T('s_' + id)).join(getLang() === 'ar' ? ' ← ' : ' → ')));
+      const info = el('div', 'rinfo'), tm = el('div', 'rtimes'); info.append(el('b', '', T('r_' + rc.id)), el('small', '', rc.pts.map(id => save.cards.includes(id) ? T('s_' + id) : T('unknown')).join(getLang() === 'ar' ? ' ← ' : ' → ')));
       tg.forEach((sec, i) => { const sp = el('span', 'md m' + (i + 1) + (med > i ? ' on' : '')); sp.append(el('i'), el('span', '', fmtTime(sec))); tm.append(sp); }); if (best) tm.append(el('span', 'best', T('bestTime', fmtTime(best)))); info.append(tm);
       const btn = el('button', 'btn', locked ? T('locked', rc.lvl) : T('raceGo')); btn.type = 'button'; btn.disabled = locked; btn.onclick = () => startRun(rc); row.append(info, btn); body.append(row); }
   } else { const ol = el('ol', 'help-list'); for (const line of T('help')) ol.append(el('li', '', line));
