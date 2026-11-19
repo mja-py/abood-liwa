@@ -23,7 +23,16 @@ const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], 
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
 save.up = Object.assign({ engine: 0, tyres: 0, balance: 0, tank: Math.min(5, save.tank || 0), magnet: 0 }, save.up);
 if (save.tut === undefined) save.tut = save.runs > 0 ? 1 : 0; // the first lesson is for a first visit: 0 until it has been finished or skipped. Anyone who has already driven does not need it.
-const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+// What the player has uncovered. The big map starts under a haze and clears where the car has been: FOG is a grid of 56 x 56 squares
+// of 256 px, one mark each, set once the car has come within FOG_R of the middle of the square. It is kept in the save as text.
+// save.spot lists the places the car has come near (SPOT_R) without reaching: those show as a question mark on both maps. A place
+// neither found nor spotted is on no map at all, so it has to be looked for.
+const FOG_N = 56, FOG_C = 256, FOG_O = FOG_N * FOG_C / 2, FOG_R = 450, SPOT_R = 1200, FOG = new Uint8Array(FOG_N * FOG_N), fogFresh = !save.fog;
+let fogDirty = false, fogIn = 0, fogAll = 0, FOG_TOT = 1; // marks not yet written to the save; squares uncovered inside the reserve, and anywhere; squares inside the reserve
+try { if (save.fog) { const b = atob(save.fog); for (let i = 0; i < FOG.length; i++) FOG[i] = b.charCodeAt(i >> 3) >> (i & 7) & 1; } } catch (e) {}
+if (!Array.isArray(save.spot)) save.spot = [];
+const fogText = () => { const by = new Uint8Array(FOG.length >> 3); for (let i = 0; i < FOG.length; i++) if (FOG[i]) by[i >> 3] |= 1 << (i & 7); return btoa(String.fromCharCode(...by)); };
+const persist = () => { try { if (fogDirty) { save.fog = fogText(); fogDirty = false; } localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
 // Map 2: the reserve doubled in width and every place moved further out. Postcards, medals, dirhams and levels are kept. Best race times
 // and their ghosts were driven on the old, shorter routes, so they start again, and so do today's race and any mission timed for the old distances.
 const grew = save.map !== 2 && save.runs > 0; // someone who drove the smaller reserve is told once (boot)
@@ -44,6 +53,15 @@ const SITES = [
 ];
 for (const s of SITES) { s.f2 = s.r * s.r; s.coins = Math.round(10 + Math.hypot(s.x, s.y) / 100); } // the further out a place is, the more its postcard pays
 const site = id => SITES.find(s => s.id === id);
+const fogAt = (x, y) => { const i = Math.floor((x + FOG_O) / FOG_C), j = Math.floor((y + FOG_O) / FOG_C); return i >= 0 && i < FOG_N && j >= 0 && j < FOG_N && FOG[j * FOG_N + i] === 1; }; // has this point been uncovered
+function uncover(x, y, r = FOG_R) { // clear the haze round a point. Returns how many squares inside the reserve were new.
+  let n = 0; const i0 = Math.max(0, Math.floor((x - r + FOG_O) / FOG_C)), i1 = Math.min(FOG_N - 1, Math.floor((x + r + FOG_O) / FOG_C)), j0 = Math.max(0, Math.floor((y - r + FOG_O) / FOG_C)), j1 = Math.min(FOG_N - 1, Math.floor((y + r + FOG_O) / FOG_C));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const p = j * FOG_N + i, cx = (i + 0.5) * FOG_C - FOG_O, cy = (j + 0.5) * FOG_C - FOG_O; if (FOG[p] || (cx - x) * (cx - x) + (cy - y) * (cy - y) > r * r) continue; FOG[p] = 1; fogDirty = true; fogAll++; if (cx * cx + cy * cy < R * R) { fogIn++; n++; } }
+  return n;
+}
+for (let p = 0; p < FOG.length; p++) { const cx = (p % FOG_N + 0.5) * FOG_C - FOG_O, cy = ((p / FOG_N | 0) + 0.5) * FOG_C - FOG_O, inside = cx * cx + cy * cy < R * R; if (inside) FOG_TOT++; if (FOG[p]) { fogAll++; if (inside) fogIn++; } } FOG_TOT--;
+if (fogFresh) { uncover(0, 0, 900); for (const id of save.cards) { const q = site(id); if (q) uncover(q.x, q.y); } } // a first visit: the camp is known, and so is the ground round every place already found
+const fogPct = () => Math.floor(fogIn / FOG_TOT * 100);
 // sixteen more big dunes without a name, so there is high ground to climb and fly off in every part of the reserve. The first four are
 // the ones round the camp; the rest stand further out. None is as tall as Tal Moreeb.
 const HILLS = [{ x: 2600, y: -900, h: 150 }, { x: -900, y: -1300, h: 120 }, { x: -1500, y: 1900, h: 140 }, { x: 1600, y: 1700, h: 130 },
@@ -823,7 +841,7 @@ function addXP(n) {
 // level rises: targets grow, hard (three-star) missions get more likely, and from level 5 some must be done without rolling the car.
 // Categories: c collecting, d driving, s stunts, e exploring, r races, t adds up over several runs.
 const MK = {
-  regions: ['e', 2, 2, 0.3, 6, 1, 1.3], rdates: ['c', 2, 10, 3, 60, 5, 1.3], rdist: ['d', 3, 300, 80, 2500, 50, 1.3], rdrift: ['s', 3, 150, 40, 1500, 10, 1.4], rair: ['s', 3, 2.5, 0.5, 14, 0.5, 1.4], // the regions: see mRaw
+  fog: ['e', 2, 5, 1, 20, 1, 1.3], regions: ['e', 2, 2, 0.3, 6, 1, 1.3], rdates: ['c', 2, 10, 3, 60, 5, 1.3], rdist: ['d', 3, 300, 80, 2500, 50, 1.3], rdrift: ['s', 3, 150, 40, 1500, 10, 1.4], rair: ['s', 3, 2.5, 0.5, 14, 0.5, 1.4], // the regions: see mRaw
   dates: ['c', 1, 20, 5, 100, 5, 1], rush: ['c', 3, 10, 2, 36, 1, 1.3], cans: ['c', 2, 1, 0.34, 6, 1, 1], earn: ['c', 4, 15, 4, 110, 5, 1.2], gold: ['c', 2, 1, 0.3, 5, 1, 1.4],
   dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 250, 35, 810, 10, 1],
   air: ['s', 1, 2.5, 0.5, 12, 0.5, 1.2], jump: ['s', 1, 0.6, 0.05, 1.6, 0.1, 1.2], drift: ['s', 1, 280, 80, 3000, 20, 1.2], bigdrift: ['s', 3, 120, 20, 500, 10, 1.3],
@@ -838,17 +856,20 @@ const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1,
 const slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
 // A mission can also be dealt in the middle of a run, to take the place of one just finished. It then counts from that moment: kinds that add
 // up (ADD) start from what the run has already done, and the others are only dealt if the run is still under half way to their target.
-const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem', 'regions', 'rdates', 'rdist', 'rdrift', 'rair']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal']);
+const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem', 'regions', 'rdates', 'rdist', 'rdrift', 'rair', 'fog']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal']);
 function newMission(avoid, live) { // avoid: the kind being swapped away, which must not come straight back
   const L = save.lvl, act = save.missions.filter(m => !m.done), catN = c => act.filter(m => MK[m.t][0] === c).length, bad = live ? new Set(NOT_LIVE) : new Set();
   for (let tries = 0; ; tries++) { const m = dealMission(avoid, bad, L, act, catN); if (!live) return m;
     if (m.nr && run.rolls) delete m.nr; // a no-roll twist is no use in a run that has already rolled
-    const raw = mProg(m), left = { dates: DATES.filter(o => !o.off).length, cans: CANS.filter(o => !o.off).length, gold: GOLD.filter(o => !o.off).length, hoop: HOOPS.filter(o => !o.off).length, visit: SITES.length - Object.keys(run.seen).length, regions: 6 - run.regN, reem: ANIMALS.filter(a => a.kind === 'gazelle' && !a.seen).length }[m.t];
+    const raw = mProg(m), left = { dates: DATES.filter(o => !o.off).length, cans: CANS.filter(o => !o.off).length, gold: GOLD.filter(o => !o.off).length, hoop: HOOPS.filter(o => !o.off).length, visit: SITES.length - Object.keys(run.seen).length, regions: 6 - run.regN, fog: Math.floor((FOG_TOT - fogIn) / FOG_TOT * 100), reem: ANIMALS.filter(a => a.kind === 'gazelle' && !a.seen).length }[m.t];
     if (MK[m.t][0] === 't') m.p = -raw; else if (ADD.has(m.t)) { if (left !== undefined && left < m.n) { if (left < 1 || tries > 8) { bad.add(m.t); continue; } m.n = left; } m.o = raw; } else if (raw >= m.n * 0.5) { bad.add(m.t); continue; }
     return m; }
 }
 function dealMission(avoid, bad, L, act, catN) {
-  let pool = Object.keys(MK).filter(k => k !== avoid && !bad.has(k) && MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
+  // A mission never sends the player to a place that is not on their map yet: those are found by exploring, not by being told.
+  const known = SITES.filter(q => save.cards.includes(q.id)), there = known.filter(q => q.id !== 'camp' && !q.hill).sort((q1, q2) => Math.hypot(q1.x, q1.y) - Math.hypot(q2.x, q2.y));
+  const can = k => k === 'goto' || k === 'dash' ? there.length > 0 : k === 'deliver' ? known.filter(q => !q.hill).length > 1 : k === 'summit' ? save.cards.includes('moreeb') : k === 'fog' ? fogIn < FOG_TOT * 0.7 : true;
+  let pool = Object.keys(MK).filter(k => k !== avoid && !bad.has(k) && can(k) && MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
   if (!pool.length) pool = ['dist', 'stunt', 'dates', 'air', 'drift', 'boost'].filter(k => !act.some(m => m.t === k)); if (!pool.length) pool = ['dist'];
   const fresh = pool.filter(k => !save.mrec.includes(k)); if (fresh.length >= 4) pool = fresh;                                         // not one you had a moment ago
   const cats = [...new Set(pool.map(k => MK[k][0]))], low = Math.min(...cats.map(catN)), want = cats.filter(c => catN(c) === low);      // spread across the categories
@@ -858,9 +879,9 @@ function dealMission(avoid, bad, L, act, catN) {
   const Le = Math.max(1, L + [-2, 0, 4][d - 1]), m = { t, n: 1, p: 0, d }; let w = w0;                                                   // an easy mission is set as if two levels lower, a hard one four higher
   m.n = Math.min(cap, Math.max(base, Math.round((base + grow * (Le - 1)) * (0.9 + Math.random() * 0.2) / stepN) * stepN)); if (DEC[t]) m.n = Math.round(m.n * 10) / 10;
   if (t === 'goto' || t === 'dash') { // a place to drive to: further out as the level rises, and for a dash, against the clock
-    const near = SITES.filter(q => q.id !== 'camp' && !q.hill).sort((q1, q2) => Math.hypot(q1.x, q1.y) - Math.hypot(q2.x, q2.y)), q = pick(near.slice(0, Math.min(near.length, 2 + Le))), far = Math.hypot(q.x, q.y);
+    const q = pick(there.slice(0, Math.min(there.length, 2 + Le))), far = Math.hypot(q.x, q.y);
     m.a = q.id; w += far / R * 0.5; if (t === 'dash') m.s = Math.ceil(far / Math.min(230, 140 + 10 * Le)) + 3;
-  } else if (t === 'deliver') { const ids = SITES.map(q => q.id).filter(id => id !== 'moreeb'); m.a = pick(ids); m.b = pick(ids.filter(id => id !== m.a)); }
+  } else if (t === 'deliver') { const ids = known.filter(q => !q.hill).map(q => q.id); m.a = pick(ids); m.b = pick(ids.filter(id => id !== m.a)); }
   if (L >= 5 && 'cds'.includes(cat) && t !== 'noroll' && Math.random() < (d === 3 ? 0.3 : 0.15)) { m.nr = 1; w *= 1.35; }                 // the twist: do it without rolling
   m.rw = Math.max(5, Math.round((25 + L * 5) * w * [0.75, 1, 1.5][d - 1] / 5) * 5); m.xp = Math.round(40 * w * [0.8, 1, 1.4][d - 1]);
   save.mrec.push(t); if (save.mrec.length > 8) save.mrec.shift(); return m;
@@ -870,6 +891,7 @@ function mProg(m) { const v = mRaw(m); return m.o ? Math.max(0, v - m.o) : v; }
 function mRaw(m) { // how far a mission has got, counting the run in progress
   const on = run.live; if (MK[m.t][0] !== 't' && (!on || (m.nr && run.rolls))) return 0; // after a roll, a no-roll mission starts again on the next run
   switch (m.t) {
+    case 'fog': return run.fogNew / FOG_TOT * 100; // how much of the big map this run has uncovered, in hundredths of the reserve
     case 'regions': return run.regN;          // how many of the six regions the run has driven in, the home sands included
     case 'rdates': return run.rDates;         // dates picked up in the oasis belt
     case 'rdist': return run.rDist / 8;       // metres driven in the Empty Quarter
@@ -1192,7 +1214,13 @@ function update(dt) {
   run.mt -= dt; if (run.mt <= 0) { run.mt = 0.25; checkMissions(); misHud();
     // which region the car is in. Crossing into another one is announced by name. A postcard, a finished mission or a new level is left to be read first; anything slighter gives way.
     const rg = regAt(car.x, car.y); if (RW[rg] > 0.6 && rg !== run.reg) { run.reg = rg; if (!run.regs[rg]) { run.regs[rg] = 1; run.regN++; } if (!run.tut && !run.race && run.t > 2) run.regNote = rg; }
-    if (run.regNote >= 0 && (noteT <= 0 || $('note').className !== 'card')) { note(T('reg')[run.regNote], 'zone', 2.6); run.regNote = -1; } }
+    if (run.regNote >= 0 && (noteT <= 0 || $('note').className !== 'card')) { note(T('reg')[run.regNote], 'zone', 2.6); run.regNote = -1; }
+    // the big map clears round the car, and a place that comes within range goes on both maps as a question mark
+    run.fogNew += uncover(car.x, car.y); const quiet = noteT <= 0 || $('note').className !== 'card';
+    for (const q of SITES) if (!save.cards.includes(q.id) && !save.spot.includes(q.id) && (q.x - car.x) ** 2 + (q.y - car.y) ** 2 < SPOT_R * SPOT_R) { save.spot.push(q.id); persist(); if (quiet && !run.tut) note(T('spot'), '', 2.6); play('tek', 1.3, 1.4); }
+    // Early in a free run Baba says which way the nearest place still to be found lies, so there is always somewhere to head for.
+    if (!run.rum && run.t > 1.5 && !run.tut && !run.race && (quiet || run.t > 12)) { run.rum = 1; let best = null, bd = 1e9; for (const q of SITES) if (!save.cards.includes(q.id)) { const d = Math.hypot(q.x - car.x, q.y - car.y); if (d < bd) { bd = d; best = q; } }
+      if (best && quiet) note(T('rumour', T('dir')[Math.round(Math.atan2(best.x - car.x, car.y - best.y) / (Math.PI / 4) + 8) % 8]), 'baba', 4.2); } }
   if (run.tut) tutTick(dt);
   if (run.race) { // race: clock, ghost recording, next checkpoint. Fuel does not run down.
     run.rt += dt; run.recT -= dt; if (run.recT <= 0) { run.recT += 0.2; if (run.rec.length < 6000) run.rec.push(Math.round(car.x), Math.round(car.y), Math.round(car.ang * 100)); }
@@ -1360,6 +1388,11 @@ function render(dt) {
     c.fillStyle = hard ? 'rgba(255,138,60,.95)' : 'rgba(200,32,43,.8)'; c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.arc(joy.ox + dx * k, joy.oy + dy * k, hard ? 24 : 20, 0, TAU); c.fill(); c.stroke();
   }
 }
+const fogCv = mk(FOG_N, FOG_N); let fogShown = -1;
+function fogPaint() { // the haze as a small picture, one dot a square, redrawn only when more has been uncovered
+  if (fogShown === fogAll) return; fogShown = fogAll; const g = fogCv.getContext('2d'), img = g.createImageData(FOG_N, FOG_N), d = img.data;
+  for (let p = 0; p < FOG.length; p++) { d[p * 4] = 226; d[p * 4 + 1] = 206; d[p * 4 + 2] = 170; d[p * 4 + 3] = FOG[p] ? 0 : 226; } g.putImageData(img, 0, 0);
+}
 const RADAR = 2600; // how far the round map in the corner sees, each way from the car
 function drawMap(cnv, big) { // big: the whole reserve, for the map sheet. Otherwise the round map: north up, the car in the middle
   const g = cnv.getContext('2d'), S = cnv.width, u = S / 264, live = st === 'play' || st === 'pause', cx = big ? 0 : car.x, cy = big ? 0 : car.y;
@@ -1368,17 +1401,18 @@ function drawMap(cnv, big) { // big: the whole reserve, for the map sheet. Other
   const rim = (x, y) => { const dx = (x - cx) * k, dy = (y - cy) * k, d = Math.hypot(dx, dy); return d > lim ? [S / 2 + dx / d * lim, S / 2 + dy / d * lim, 1] : [S / 2 + dx, S / 2 + dy, 0]; }; // a far-off thing is pinned to the edge of the round map, in its direction
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S); if (!big) { g.fillStyle = '#785442'; g.fillRect(0, 0, S, S); } g.imageSmoothingEnabled = true;
   g.setTransform(e, 0, 0, e, px(-R * 1.04), py(-R * 1.04)); g.drawImage(miniBase, 0, 0); g.setTransform(1, 0, 0, 1, 0, 0);
+  if (big) { fogPaint(); g.save(); g.beginPath(); g.arc(px(0), py(0), R * k, 0, TAU); g.clip(); g.drawImage(fogCv, px(-FOG_O), py(-FOG_O), 2 * FOG_O * k, 2 * FOG_O * k); g.restore(); } // the haze over what has not been driven yet, soft at its edges
   g.strokeStyle = INK; g.lineWidth = 2 * u; g.beginPath(); g.arc(px(0), py(0), R * k, 0, TAU); g.stroke();
-  g.fillStyle = '#fffaf0'; g.strokeStyle = INK; g.lineWidth = u; const ra = big ? 0.8 * u : u;
-  for (const o of RAMPS) if (seen(o.x, o.y)) { g.save(); g.translate(px(o.x), py(o.y)); g.rotate(o.a); g.beginPath(); g.moveTo(4.5 * ra, 0); g.lineTo(-3 * ra, -3.4 * ra); g.lineTo(-3 * ra, 3.4 * ra); g.closePath(); g.fill(); g.stroke(); g.restore(); } // ramps, pointing the way they throw
+  g.fillStyle = '#fffaf0'; g.strokeStyle = INK; g.lineWidth = u; const ra = big ? 0.8 * u : u, shown = (x, y) => seen(x, y) && (!big || fogAt(x, y)); // on the big map, ramps and golden dates show only where the haze has cleared
+  for (const o of RAMPS) if (shown(o.x, o.y)) { g.save(); g.translate(px(o.x), py(o.y)); g.rotate(o.a); g.beginPath(); g.moveTo(4.5 * ra, 0); g.lineTo(-3 * ra, -3.4 * ra); g.lineTo(-3 * ra, 3.4 * ra); g.closePath(); g.fill(); g.stroke(); g.restore(); } // ramps, pointing the way they throw
   if (live) { let best = null, bd = 1e9, any = false; g.fillStyle = SHEMAGH; g.strokeStyle = '#fffaf0'; g.lineWidth = 1.2 * u;
     for (const o of CANS) if (!o.off) { const d = Math.hypot(o.x - cx, o.y - cy); if (d < bd) { bd = d; best = o; } if (!seen(o.x, o.y)) continue; if (d * k < lim) any = true; g.beginPath(); g.arc(px(o.x), py(o.y), (big ? 2.6 : 4) * u, 0, TAU); g.fill(); g.stroke(); }
     if (!big && !any && best) { const q = rim(best.x, best.y); g.beginPath(); g.arc(q[0], q[1], 4 * u, 0, TAU); g.fill(); g.stroke(); } // no jerrycan in sight: the nearest one shows at the edge, the way to drive for it
-    g.fillStyle = '#ffd23c'; g.strokeStyle = INK; g.lineWidth = u; for (const o of GOLD) if (!o.off && seen(o.x, o.y)) { g.beginPath(); g.arc(px(o.x), py(o.y), (big ? 3.1 : 4) * u, 0, TAU); g.fill(); g.stroke(); } }
+    g.fillStyle = '#ffd23c'; g.strokeStyle = INK; g.lineWidth = u; for (const o of GOLD) if (!o.off && shown(o.x, o.y)) { g.beginPath(); g.arc(px(o.x), py(o.y), (big ? 3.1 : 4) * u, 0, TAU); g.fill(); g.stroke(); } }
   g.font = `800 ${Math.round(big ? 9 * u : 12 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  SITES.forEach((s, i) => { const on = save.cards.includes(s.id), home = !big && s.id === 'camp', r = (big ? 7 : 7.5) * u; if (!home && !seen(s.x, s.y)) return; const q = home ? rim(s.x, s.y) : [px(s.x), py(s.y), 0]; // the camp never leaves the round map
+  SITES.forEach((s, i) => { const on = save.cards.includes(s.id), home = !big && s.id === 'camp', r = (big ? 7 : 7.5) * u; if (!on && !save.spot.includes(s.id) && s.id !== 'camp') return; if (!home && !seen(s.x, s.y)) return; const q = home ? rim(s.x, s.y) : [px(s.x), py(s.y), 0]; // a place is on the maps once it has been found, or come near; the camp never leaves the round map
     g.fillStyle = on ? '#1f7a74' : '#d9b57f'; g.strokeStyle = q[2] ? '#fffaf0' : INK; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(q[0], q[1], q[2] ? r * 0.8 : r, 0, TAU); g.fill(); g.stroke();
-    g.fillStyle = on ? '#fffaf0' : INK; g.fillText(big ? String(i + 1) : on ? '' : '?', q[0], q[1] + 0.5 * u); });
+    g.fillStyle = on ? '#fffaf0' : INK; g.fillText(!on ? '?' : big ? String(i + 1) : '', q[0], q[1] + 0.5 * u); });
   if (big) { const names = T('reg'); g.font = `800 ${Math.round(8 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; // the five regions by name, each in the middle of its slice
     [[350, 5600], [65, 5000], [155, 5000], [230, 5000], [300, 5200]].forEach(([b, d], i) => { const a = b * Math.PI / 180, x = px(Math.sin(a) * d), y = py(-Math.cos(a) * d); g.lineWidth = 3 * u; g.strokeStyle = 'rgba(255,250,240,.8)'; g.strokeText(names[i + 1], x, y); g.fillStyle = INK; g.fillText(names[i + 1], x, y); }); }
   if (run.race && live && run.ri < run.race.pts.length) { // the race route still to drive
@@ -1434,7 +1468,7 @@ function showMenu() {
 function startRun(rc, lesson) { // rc: a race to drive, or nothing for a free safari. lesson: give the first lesson again, asked for from How to play
   unlockAudio(); st = 'play'; newDay(); resetCar(); resetWorld();
   const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl });
-  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0, reg: 0, regs: { 0: 1 }, regN: 1, regNote: -1, rDist: 0, rAir: 0, rDrift: 0, rDates: 0,
+  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0, reg: 0, regs: { 0: 1 }, regN: 1, regNote: -1, rDist: 0, rAir: 0, rDrift: 0, rDates: 0, fogNew: 0, rum: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   run.tut = !rc && (lesson || !save.tut) ? { i: 0, ok: 0, d0: 0, r0: 0, f0: 0 } : null; tutKey = ''; show('tut', !!run.tut); if (run.tut) tutHud(0, 0);
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
@@ -1521,7 +1555,7 @@ function openSheet(id) {
   } else if (id === 'map') {
     const wrap2 = el('div', 'map-wrap'), cn = mk(600, 600), ul = el('ul', 'legend'); drawMap(cn, true);
     SITES.forEach((s, i) => { const on = save.cards.includes(s.id), li = el('li', on ? '' : 'off'); li.append(el('i', '', String(i + 1)), el('span', '', on ? T('s_' + s.id) : T('unknown'))); ul.append(li); });
-    const side = el('div', 'menu-text'); side.append(el('p', 'label', T('mapNote')), ul); wrap2.append(cn, side); body.append(wrap2);
+    const side = el('div', 'menu-text'); side.append(el('b', '', T('explored', fogPct(), save.cards.length, SITES.length)), el('p', 'label', T('mapNote')), ul); wrap2.append(cn, side); body.append(wrap2);
   } else if (id === 'missions') {
     const top = el('div', 'rank'); rankRow(top); body.append(top); if (nextUnlock()) body.append(el('p', 'hint', nextUnlock()));
     for (const m of save.missions) { const row = el('div', 'mrow' + (m.done ? ' done' : '')), v = Math.min(m.n, mProg(m)), pb = el('div', 'pbar'), pf = el('i'), ttl = el('b'); pf.style.width = Math.round(v / m.n * 100) + '%'; pb.append(pf);
@@ -1591,7 +1625,7 @@ const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); tutKey = ''; coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, region, regAt, RW, REG, ANIMALS, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, region, regAt, RW, REG, ANIMALS, FOG, uncover, fogAt, fogPct, persist, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
