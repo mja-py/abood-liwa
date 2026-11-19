@@ -24,24 +24,38 @@ try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); }
 save.up = Object.assign({ engine: 0, tyres: 0, balance: 0, tank: Math.min(5, save.tank || 0), magnet: 0 }, save.up);
 if (save.tut === undefined) save.tut = save.runs > 0 ? 1 : 0; // the first lesson is for a first visit: 0 until it has been finished or skipped. Anyone who has already driven does not need it.
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
+// Map 2: the reserve doubled in width and every place moved further out. Postcards, medals, dirhams and levels are kept. Best race times
+// and their ghosts were driven on the old, shorter routes, so they start again, and so do today's race and any mission timed for the old distances.
+const grew = save.map !== 2 && save.runs > 0; // someone who drove the smaller reserve is told once (boot)
+if (save.map !== 2) { save.times = {}; for (const k of Object.keys(save.medals)) if (k.startsWith('daily:')) delete save.medals[k]; save.missions = save.missions.filter(m => m.t !== 'dash'); save.map = 2; persist(); try { localStorage.removeItem('abood-liwa-ghost'); } catch (e) {} }
 const COLORS = { // white first: the classic desert car, and Abood's red shemagh stands out against it
   white: { main: '#fbf9f2', dark: '#8f887a', trim: SHEMAGH, cost: 0 }, teal: { main: '#1f7a74', dark: '#123f3c', trim: '#fffaf0', cost: 150 },
   yellow: { main: '#f2c230', dark: '#7a5a12', trim: '#2b1a12', cost: 300 }, red: { main: SHEMAGH, dark: '#6e1118', trim: '#fffaf0', cost: 500 },
   black: { main: '#2f2b28', dark: '#151312', trim: '#e0a72a', cost: 1000 },
 };
 
-// ---------- the world: a round reserve of dunes, 6.8 km of pixels across ----------
-const R = 3400, WX = 0.866, WY = 0.5; // WX,WY: the wind direction that shapes the dunes
+// ---------- the world: a round reserve of dunes, 13.6 km of pixels across ----------
+const R = 6800, WX = 0.866, WY = 0.5; // WX,WY: the wind direction that shapes the dunes
 const SITES = [
-  { id: 'camp', x: 0, y: 0, r: 250 }, { id: 'moreeb', x: 1500, y: -1750, r: 120, hill: 200 }, { id: 'oasis', x: -1950, y: -850, r: 300 },
-  { id: 'fort', x: 2350, y: 650, r: 240 }, { id: 'camels', x: -750, y: 1750, r: 230 }, { id: 'oryx', x: 950, y: 1500, r: 180 },
-  { id: 'falcon', x: -2350, y: 1250, r: 150 }, { id: 'well', x: 650, y: -950, r: 170 }, { id: 'sabkha', x: -550, y: -2350, r: 380 },
-  { id: 'festival', x: -1300, y: 350, r: 230 }, { id: 'gate', x: 350, y: 2850, r: 170 },
+  { id: 'camp', x: 0, y: 0, r: 250 }, { id: 'moreeb', x: 3600, y: -3400, r: 120, hill: 200 }, { id: 'oasis', x: -4200, y: -1500, r: 300 },
+  { id: 'fort', x: 4800, y: 900, r: 240 }, { id: 'camels', x: -2100, y: 3000, r: 230 }, { id: 'oryx', x: 2600, y: 2400, r: 180 },
+  { id: 'falcon', x: -5000, y: 2200, r: 150 }, { id: 'well', x: 700, y: -1000, r: 170 }, { id: 'sabkha', x: -800, y: -4300, r: 700 },
+  { id: 'festival', x: -3700, y: 300, r: 230 }, { id: 'gate', x: 700, y: 3600, r: 170 },
 ];
-for (const s of SITES) { s.f2 = s.r * s.r; s.coins = Math.round(10 + Math.hypot(s.x, s.y) / 60); }
+for (const s of SITES) { s.f2 = s.r * s.r; s.coins = Math.round(10 + Math.hypot(s.x, s.y) / 100); } // the further out a place is, the more its postcard pays
 const site = id => SITES.find(s => s.id === id);
-// four more big dunes without a name, so there is high ground to climb and fly off in every quarter of the reserve
-const HILLS = [{ x: 2600, y: -900, h: 150 }, { x: -900, y: -1300, h: 120 }, { x: -1700, y: 2200, h: 140 }, { x: 1900, y: 2000, h: 130 }];
+// sixteen more big dunes without a name, so there is high ground to climb and fly off in every part of the reserve. The first four are
+// the ones round the camp; the rest stand further out. None is as tall as Tal Moreeb.
+const HILLS = [{ x: 2600, y: -900, h: 150 }, { x: -900, y: -1300, h: 120 }, { x: -1500, y: 1900, h: 140 }, { x: 1600, y: 1700, h: 130 },
+  { x: 800, y: -2700, h: 130 }, { x: 1500, y: -5200, h: 150 }, { x: 5200, y: -800, h: 150 }, { x: 4300, y: 3200, h: 140 }, { x: 2200, y: 4600, h: 150 }, { x: -900, y: 5200, h: 160 },
+  { x: -4000, y: 4000, h: 140 }, { x: -2600, y: -200, h: 120 }, { x: -3200, y: -3600, h: 150 }, { x: -5900, y: 300, h: 130 }, { x: 3000, y: 700, h: 110 }, { x: -300, y: 2100, h: 120 }];
+// H() below is asked for every pixel of every ground tile, so it must not walk the whole list of dunes and places each time. They are
+// sorted once into squares of 1024 px, and H() looks only at the few that can reach the square it is in. The order is kept: big dunes
+// first, then the places, because level ground round a landmark is laid over whatever is already there.
+const GC = 1024, GH = Math.ceil((R + 1400) / GC), GN = GH * 2, BUMPS = Array.from({ length: GN * GN }, () => []);
+for (const q of [...HILLS.map(q => ({ x: q.x, y: q.y, h: q.h, c2: 1.176e6, k: 0 })), ...SITES.map(s => s.hill ? { x: s.x, y: s.y, h: s.hill, c2: 1.6e6, k: 1 } : { x: s.x, y: s.y, f2: s.f2, c2: s.f2 * 6, k: 2 })]) {
+  const rr = Math.sqrt(q.c2); for (let j = Math.floor((q.y - rr) / GC) + GH; j <= Math.floor((q.y + rr) / GC) + GH; j++) for (let i = Math.floor((q.x - rr) / GC) + GH; i <= Math.floor((q.x + rr) / GC) + GH; i++) if (i >= 0 && i < GN && j >= 0 && j < GN) BUMPS[j * GN + i].push(q);
+}
 
 function hash2(ix, iy) { let n = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ 0x5bd1e995; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
 function vn(x, y) { // smooth value noise
@@ -61,14 +75,14 @@ function H(x, y) {
   let h = dune((x * WX + y * WY) / 560 + w * 0.7, 0.68) * 95 * amp // the bend in the crest lines is kept gentle enough that every slip face looks downwind
     + ridge((x * 0.5 - y * 0.866) / 250 + w * 0.9 + 3.1, 0.66) * 12 * (0.4 + amp * 0.6)
     + vn(x * 0.0024 + 1.7, y * 0.0024 + 5.1) * 12;
-  for (const q of HILLS) { const dx = x - q.x, dy = y - q.y, d2 = dx * dx + dy * dy; if (d2 < 1.176e6) h += q.h * (Math.exp(-d2 / 160000) - 6.4e-4); }
-  for (const s of SITES) {
-    const dx = x - s.x, dy = y - s.y, d2 = dx * dx + dy * dy;
-    // Each bump is lowered by its own value at the edge where it is cut off (e^-7.346 and e^-6), so it meets the dunes with no step.
-    // A step there was only a fraction of a pixel high, but the crest shading picks it up and draws it as a dashed ring on the sand.
-    if (s.hill) { if (d2 < 1.6e6) h += s.hill * (Math.exp(-d2 / 217800) - 6.45e-4); } // Tal Moreeb: one big dune
-    else if (d2 < s.f2 * 6) { const f = Math.exp(-d2 / s.f2) - 2.48e-3; h = h * (1 - f) + 5 * f; } // level ground around a landmark
-  }
+  const gi = Math.floor(x / GC) + GH, gj = Math.floor(y / GC) + GH;
+  if (gi >= 0 && gi < GN && gj >= 0 && gj < GN) { const near = BUMPS[gj * GN + gi];
+    for (let n = 0; n < near.length; n++) { const q = near[n], dx = x - q.x, dy = y - q.y, d2 = dx * dx + dy * dy; if (d2 >= q.c2) continue;
+      // Each bump is lowered by its own value at the edge where it is cut off (e^-7.346 and e^-6), so it meets the dunes with no step.
+      // A step there was only a fraction of a pixel high, but the crest shading picks it up and draws it as a dashed ring on the sand.
+      if (q.k === 0) h += q.h * (Math.exp(-d2 / 160000) - 6.4e-4);                              // a big dune without a name
+      else if (q.k === 1) h += q.h * (Math.exp(-d2 / 217800) - 6.45e-4);                        // Tal Moreeb: one big dune
+      else { const f = Math.exp(-d2 / q.f2) - 2.48e-3; h = h * (1 - f) + 5 * f; } } }           // level ground around a landmark
   const d = Math.hypot(x, y); if (d > R - 150) { const e = (d - (R - 150)) / 150; h += e * e * 45; } // the rim rises
   return h;
 }
@@ -109,8 +123,8 @@ function tile(ix, iy) {
   c = bakeTile(ix, iy); tiles.set(key, c); if (tiles.size > TILE_MAX) tiles.delete(tiles.keys().next().value);
   return c;
 }
-// the whole reserve in one small picture, for the round map
-const MS = 264, miniBase = mk(MS, MS);
+// the whole reserve in one picture. The big map shows all of it; the round map in the corner shows the part around the car (drawMap).
+const MS = 528, miniBase = mk(MS, MS);
 async function bakeMini(progress) {
   const g = miniBase.getContext('2d'), img = g.createImageData(MS, MS), px = img.data, k = 2 * R * 1.04 / MS, hg = new Float32Array(MS * MS);
   for (let j = 0; j < MS; j++) { for (let i = 0; i < MS; i++) hg[j * MS + i] = H((i + 0.5 - MS / 2) * k, (j + 0.5 - MS / 2) * k); if (j % 44 === 43) { progress(j / MS); await nextFrame(); } }
@@ -653,59 +667,60 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
   q = site('sabkha'); P('sign', q.x, q.y);
   q = site('festival'); P('stall', q.x, q.y - 30); P('palm', q.x - 122, q.y - 8); P('palm', q.x + 126, q.y, 1); P('basket', q.x + 44, q.y + 44); P('basket', q.x - 34, q.y + 54);
   q = site('gate'); P('gate', q.x, q.y); PROPS.push({ kind: 'post', x: q.x - 70, y: q.y, rad: 7, hide: 1 }, { kind: 'post', x: q.x + 70, y: q.y, rad: 7, hide: 1 });
-  for (let k = 0; k < 170; k++) { const a = k / 170 * TAU; P('post', Math.cos(a) * (R + 12), Math.sin(a) * (R + 12)); } // the ring of flags round the reserve
-  for (let j = -12; j <= 12; j++) for (let i = -12; i <= 12; i++) { // scattered desert shrubs
+  for (let k = 0; k < 340; k++) { const a = k / 340 * TAU; P('post', Math.cos(a) * (R + 12), Math.sin(a) * (R + 12)); } // the ring of flags round the reserve
+  for (let j = -25; j <= 25; j++) for (let i = -25; i <= 25; i++) { // scattered desert shrubs
     if (hash2(i, j + 99) > 0.3) continue; const x = (i + hash2(i + 7, j)) * 280, y = (j + hash2(i, j - 7)) * 280;
     if (Math.hypot(x, y) < R - 80 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + 30)) P('shrub', x, y, hash2(i, j) > 0.5);
   }
-  // What is scattered on the sand: 48 lines of dates curving across the dunes, and 16 jerrycans spaced well apart. The first jerrycan
-  // is always in the same place near the camp, so a first run can always reach one.
+  // What is scattered on the sand: 180 lines of dates curving across the dunes, and 12 jerrycans a long way apart, a few more of them
+  // towards the middle than out by the rim. Fuel has to be looked for on the map. The first jerrycan is always in the same place near
+  // the camp, so a first run can always reach one.
   const scatter = r => { const dates = [], cans = [{ x: 540, y: -280 }];
-    for (let k = 0; k < 48; k++) {
+    for (let k = 0; k < 180; k++) {
       const a = r() * TAU, d = 300 + Math.sqrt(r()) * (R - 560), bend = (r() - 0.5) * 0.3, n = 5 + (r() * 3 | 0); let x = Math.cos(a) * d, y = Math.sin(a) * d, an = r() * TAU;
       for (let i = 0; i < n; i++) { if (Math.hypot(x, y) < R - 120) dates.push({ x, y }); an += bend; x += Math.cos(an) * 48; y += Math.sin(an) * 48; }
     }
-    for (let tries = 0; cans.length < 16 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.sqrt(r()) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
-      if (cans.every(o => Math.hypot(o.x - x, o.y - y) > 640) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
+    for (let tries = 0; cans.length < 12 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.pow(r(), 0.7) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
+      if (cans.every(o => Math.hypot(o.x - x, o.y - y) > 2400) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
     return { dates, cans }; };
-  // The dates and jerrycans are dealt afresh every day (dealDay, below). They used to come from this one fixed stream of numbers, and the
-  // ramps come next from the same stream. So the old scatter is still drawn from it here and thrown away: every ramp stays where it has always been.
-  const r = rng(20261110); scatter(r);
+  // The dates and jerrycans are dealt afresh every day (dealDay, below). The playground has its own fixed stream of numbers, so it never moves.
+  const r = rng(20261119);
   // The playground. Ramps: wooden kickers that throw the car into the air, each turned to face the longest drop it can find. Half of them
   // have a hoop to fly through, and some a boost strip on the run-up, so a strip, a ramp and a hoop make one line to drive.
   const slope = (x, y) => Math.hypot(H(x + 6, y) - H(x - 6, y), H(x, y + 6) - H(x, y - 6)) / 12;
   const open = (x, y, m) => Math.hypot(x, y) < R - 420 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + m) && PROPS.every(p => !p.rad || Math.hypot(p.x - x, p.y - y) > p.rad + 90);
-  for (let tries = 0; RAMPS.length < 18 && tries < 6000; tries++) {
+  for (let tries = 0; RAMPS.length < 56 && tries < 20000; tries++) {
     const first = !RAMPS.length, a = r() * TAU, d = first ? 420 + r() * 160 : 500 + Math.sqrt(r()) * (R - 1000), x = Math.cos(a) * d, y = Math.sin(a) * d;
-    if (!open(x, y, 170) || slope(x, y) > 0.15 || RAMPS.some(o => Math.hypot(o.x - x, o.y - y) < 560)) continue;
+    if (!open(x, y, 170) || slope(x, y) > 0.15 || RAMPS.some(o => Math.hypot(o.x - x, o.y - y) < 700) || Math.hypot(x - 540, y + 280) < 300 || Math.hypot(x - 300, y - 85) < 330) continue; // and clear of the first jerrycan and the lesson's trail of dates
     let dir = -1, low = 1e9; for (let k = 0; k < 16; k++) { const an = k / 16 * TAU, cs = Math.cos(an), sn = Math.sin(an);
-      if (slope(x - cs * 150, y - sn * 150) > 0.3 || H(x - cs * 150, y - sn * 150) > H(x, y) + 22) continue; // the run-up has to be drivable
+      if (slope(x - cs * 150, y - sn * 150) > 0.3 || H(x - cs * 150, y - sn * 150) > H(x, y) + 22 || !open(x - cs * 200, y - sn * 200, 0) || !open(x + cs * 320, y + sn * 320, 40)) continue; // the run-up has to be drivable, and neither it nor the landing may be in a camp or against a palm
       const hh = H(x + cs * 150, y + sn * 150) + H(x + cs * 300, y + sn * 300); if (hh < low) { low = hh; dir = an; } }
     if (dir < 0) continue;
     const cs = Math.cos(dir), sn = Math.sin(dir), i = RAMPS.length; RAMPS.push({ kind: 'ramp', x, y, a: dir, cs, sn });
     if (i % 2 === 0) HOOPS.push({ kind: 'hoop', x: x + cs * 145, y: y + sn * 145, a: dir, cs, sn }); // close enough that the car is at ring height as it passes, slow or boosted
     if (i % 3 === 0 && open(x - cs * 330, y - sn * 330, 60)) PADS.push({ x: x - cs * 330, y: y - sn * 330, a: dir, cs, sn, cd: 0 });
   }
-  for (let tries = 0, n = PADS.length + 7; PADS.length < n && tries < 3000; tries++) { // more boost strips out on the open sand, pointing downwind where the crests are
+  for (let tries = 0, n = PADS.length + 24; PADS.length < n && tries < 9000; tries++) { // more boost strips out on the open sand, pointing downwind where the crests are
     const a = r() * TAU, d = 600 + Math.sqrt(r()) * (R - 1100), x = Math.cos(a) * d, y = Math.sin(a) * d, dir = Math.atan2(WY, WX) + (r() - 0.5) * 0.9;
-    if (open(x, y, 120) && slope(x, y) < 0.2 && PADS.every(o => Math.hypot(o.x - x, o.y - y) > 500) && RAMPS.every(o => Math.hypot(o.x - x, o.y - y) > 200)) PADS.push({ x, y, a: dir, cs: Math.cos(dir), sn: Math.sin(dir), cd: 0 });
+    if (open(x, y, 120) && slope(x, y) < 0.2 && PADS.every(o => Math.hypot(o.x - x, o.y - y) > 600) && RAMPS.every(o => Math.hypot(o.x - x, o.y - y) > 200)) PADS.push({ x, y, a: dir, cs: Math.cos(dir), sn: Math.sin(dir), cd: 0 });
   }
-  // Today's sand. The lines of dates, the jerrycans and four of the golden dates are placed from the date, so every day is a different
+  // Today's sand. The lines of dates, the jerrycans and eight of the golden dates are placed from the date, so every day is a different
   // map to learn, and everyone playing that day has the same one. What never moves: the trail of six dates out of the camp, the first
   // jerrycan, a golden date (worth ten) on the top of every big dune, and the ramps, hoops and boost strips.
   dealDay = () => {
     worldDay = dayKey(); let h = 11; for (const ch of worldDay) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0;
     const g = rng(h), s = scatter(rng(h ^ 0x51ed270b));
-    DATES.length = 0; for (let i = 0; i < 6; i++) DATES.push({ x: 170 + i * 50, y: 120 - i * 14 }); for (const o of s.dates) DATES.push(o);
+    DATES.length = 0; for (let i = 0; i < 6; i++) DATES.push({ x: 170 + i * 48, y: 91 - i * 13.8 }); for (const o of s.dates) DATES.push(o); // the lesson's trail lies dead ahead of where the car starts (resetCar), so driving straight on collects all six
     CANS.length = 0; for (const o of s.cans) CANS.push(o);
     GOLD.length = 0; for (const q of HILLS) GOLD.push({ x: q.x, y: q.y });
-    for (let tries = 0; GOLD.length < HILLS.length + 4 && tries < 2000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 700)) GOLD.push({ x, y }); }
+    for (let tries = 0; GOLD.length < HILLS.length + 8 && tries < 4000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 900)) GOLD.push({ x, y }); }
   };
   dealDay();
   const herd = (kind, id, n, spread) => { const s = typeof id === 'string' ? site(id) : id; for (let k = 0; k < n; k++) { const a = k / n * TAU + 0.6, x = s.x + Math.cos(a) * spread, y = s.y + Math.sin(a) * spread * 0.7;
     ANIMALS.push({ kind, x, y, hx: s.x, hy: s.y, tx: x, ty: y, ph: k, dir: k % 2 ? 1 : -1, wait: 1 + k, run: 0, rx: 0, ry: 0, rad: KIND[kind][2] }); } };
   herd('camel', 'camels', 5, 130); herd('oryx', 'oryx', 4, 110);
   herd('gazelle', { x: 1750, y: -330 }, 5, 90); herd('gazelle', { x: -1480, y: -1480 }, 4, 80); herd('gazelle', { x: -200, y: 950 }, 3, 70); herd('camel', { x: 1250, y: 380 }, 2, 60); // loose herds out on the sand
+  herd('gazelle', { x: -3000, y: 1700 }, 5, 90); herd('gazelle', { x: 2300, y: -2300 }, 4, 80); herd('gazelle', { x: 900, y: 4800 }, 4, 80); herd('gazelle', { x: -1900, y: -3000 }, 4, 80); herd('camel', { x: -3300, y: -700 }, 3, 70); herd('oryx', { x: 3900, y: 1900 }, 3, 80); // and further out
 })();
 
 // ---------- state ----------
@@ -769,12 +784,12 @@ function addXP(n) {
 // Categories: c collecting, d driving, s stunts, e exploring, r races, t adds up over several runs.
 const MK = {
   dates: ['c', 1, 20, 5, 100, 5, 1], rush: ['c', 3, 10, 2, 36, 1, 1.3], cans: ['c', 2, 1, 0.34, 6, 1, 1], earn: ['c', 4, 15, 4, 110, 5, 1.2], gold: ['c', 2, 1, 0.3, 5, 1, 1.4],
-  dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 180, 15, 410, 10, 1],
+  dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 250, 35, 810, 10, 1],
   air: ['s', 1, 2.5, 0.5, 12, 0.5, 1.2], jump: ['s', 1, 0.6, 0.05, 1.6, 0.1, 1.2], drift: ['s', 1, 280, 80, 3000, 20, 1.2], bigdrift: ['s', 3, 120, 20, 500, 10, 1.3],
   donut: ['s', 3, 1, 0.3, 5, 1, 1.3], two: ['s', 2, 2, 0.4, 10, 0.5, 1.4], twohold: ['s', 4, 1, 0.12, 3, 0.1, 1.5], flip: ['s', 2, 1, 0.2, 4, 1, 1.5],
   spin: ['s', 2, 1, 0.25, 5, 1, 1.3], stunt: ['s', 1, 550, 150, 8000, 50, 1.2], combo: ['s', 2, 2, 0.34, CH_MAX, 1, 1.3],
   ramp: ['s', 1, 2, 0.5, 10, 1, 1.1], hoop: ['s', 2, 1, 0.34, 6, 1, 1.4], boost: ['d', 1, 2, 0.5, 8, 1, 1],
-  visit: ['e', 1, 2, 0.5, 8, 1, 1.2], goto: ['e', 1, 1, 0, 1, 1, 1], dash: ['e', 3, 1, 0, 1, 1, 1.4], deliver: ['e', 2, 2, 0, 2, 1, 1.5], summit: ['e', 3, 1, 0, 1, 1, 1.5], reem: ['e', 2, 3, 0.6, 10, 1, 1.2],
+  visit: ['e', 1, 2, 0.34, 6, 1, 1.2], goto: ['e', 1, 1, 0, 1, 1, 1], dash: ['e', 3, 1, 0, 1, 1, 1.4], deliver: ['e', 2, 2, 0, 2, 1, 1.5], summit: ['e', 3, 1, 0, 1, 1, 1.5], reem: ['e', 2, 3, 0.6, 10, 1, 1.2],
   race: ['r', 2, 1, 0, 1, 1, 1.3], medal: ['r', 3, 1, 0.2, 3, 1, 1.6],
   tdates: ['t', 2, 110, 30, 1e9, 10, 1.4], tdist: ['t', 2, 3600, 600, 1e9, 100, 1.4], tstunt: ['t', 3, 2500, 600, 1e9, 100, 1.4], tair: ['t', 3, 12, 2.5, 1e9, 1, 1.4], tvisit: ['t', 3, 8, 1.5, 1e9, 1, 1.4],
 };
@@ -928,16 +943,17 @@ const RACES = [
 ];
 function dailyRace() {
   const d = dayKey(); let h = 7; for (const ch of d) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0;
-  const r = rng(h), ids = SITES.map(s => s.id); for (let i = ids.length - 1; i > 0; i--) { const j = r() * (i + 1) | 0; [ids[i], ids[j]] = [ids[j], ids[i]]; }
-  return { id: 'daily', key: 'daily:' + d, lvl: 1, pts: ids.slice(0, 4) };
+  const r = rng(h), left = SITES.slice(), pts = [left.splice(r() * left.length | 0, 1)[0]];
+  while (pts.length < 4) { const a = pts[pts.length - 1]; left.sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y)); pts.push(left.splice(r() * 3 | 0, 1)[0]); } // each leg goes to one of the three nearest places not yet used, so the race of the day is a tour of one part of the reserve, never three crossings of it
+  return { id: 'daily', key: 'daily:' + d, lvl: 1, pts: pts.map(q => q.id) };
 }
 const raceKey = rc => rc.key || rc.id, reach = s => s.hill ? 130 : s.r + 50;
 function raceLen(rc) { let L = 0; for (let i = 1; i < rc.pts.length; i++) { const a = site(rc.pts[i - 1]), b = site(rc.pts[i]); L += Math.hypot(a.x - b.x, a.y - b.y); } return L; }
-const raceTargets = rc => { const L = raceLen(rc), k = 3 + rc.pts.length; return [L / 118 + k, L / 155 + k, L / 192 + k]; }; // bronze, silver, gold, in seconds: a pace, plus time to get going and to turn at each place
-const GH_KEY = 'abood-liwa-ghost'; let ghosts = {};
+const raceTargets = rc => { const L = raceLen(rc), k = 3 + rc.pts.length; return [L / 160 + k, L / 220 + k, L / 285 + k]; }; // bronze, silver, gold, in seconds: a pace, plus time to get going and to turn at each place. A clean straight drive in the first car, with nothing upgraded, holds about 330.
+const GH_KEY = 'abood-liwa-ghost2'; let ghosts = {}; // 2: ghosts of the bigger map
 try { ghosts = JSON.parse(localStorage.getItem(GH_KEY) || '{}') || {}; } catch (e) {}
 function finishRace() {
-  const rc = run.race, key = raceKey(rc), tg = raceTargets(rc), tm = run.rt, medal = tm <= tg[2] ? 3 : tm <= tg[1] ? 2 : tm <= tg[0] ? 1 : 0, had = save.medals[key] || 0, k = Math.max(1, Math.round(raceLen(rc) / 4000));
+  const rc = run.race, key = raceKey(rc), tg = raceTargets(rc), tm = run.rt, medal = tm <= tg[2] ? 3 : tm <= tg[1] ? 2 : tm <= tg[0] ? 1 : 0, had = save.medals[key] || 0, k = Math.max(1, Math.round(raceLen(rc) / 8000));
   let gain = 0; for (let i = had + 1; i <= medal; i++) gain += [0, 30, 60, 120][i] * k;
   if (medal > had) save.medals[key] = medal;
   const best = save.times[key], isBest = !best || tm < best;
@@ -1146,7 +1162,7 @@ function update(dt) {
   car.lean += ((car.air || car.roll ? 0 : car.tside * clamp((car.tip - 0.1) / 0.9, 0, 1) * 0.62) - car.lean) * Math.min(1, dt * 10); // one side lifts as the car tips
   car.spin += (car.vx * c2 + car.vy * s2) / (12.5 * CS) * dt;
   const k = Math.min(1, dt * 4); camx += (car.x + car.vx * 0.3 - camx) * k; camy += (car.y + car.vy * 0.3 - (car.z - h0) * 0.4 - camy) * k; // and up with a high jump, so the car stays in the picture
-  camZ += (1 - 0.1 * sstep(280, 520, sp) - 0.08 * clamp((car.z - h0) / 150, 0, 1) - camZ) * Math.min(1, dt * 2.2); // pull back at speed and on a big jump, so there is more to see ahead
+  camZ += (1 - 0.2 * sstep(150, 430, sp) - 0.08 * clamp((car.z - h0) / 150, 0, 1) - camZ) * Math.min(1, dt * 2.2); // pull back at speed and on a big jump, so there is more to see ahead
   engine(sp, thr);
 }
 
@@ -1200,9 +1216,9 @@ function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under 
     c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 2; c.beginPath(); c.ellipse(s.x - 14, s.y + 12, 46, 18, 0, 3.4, 5); c.stroke(); c.beginPath(); c.ellipse(s.x + 20, s.y + 34, 40, 12, 0, 0.3, 1.9); c.stroke();
   }
   s = SAB;
-  if (s.x > x0 - 400 && s.x < x1 + 400 && s.y > y0 - 400 && s.y < y1 + 400) { // salt crust cracks
+  if (s.x > x0 - s.r && s.x < x1 + s.r && s.y > y0 - s.r && s.y < y1 + s.r) { // salt crust cracks
     c.strokeStyle = 'rgba(120,96,70,.35)'; c.lineWidth = 1.4; c.beginPath();
-    for (let k = 0; k < 46; k++) { const a = hash2(k, 5) * TAU, d = Math.sqrt(hash2(k, 9)) * s.r * 0.72, x = s.x + Math.cos(a) * d, y = s.y + Math.sin(a) * d, b = hash2(k, 3) * TAU;
+    for (let k = 0; k < 150; k++) { const a = hash2(k, 5) * TAU, d = Math.sqrt(hash2(k, 9)) * s.r * 0.72, x = s.x + Math.cos(a) * d, y = s.y + Math.sin(a) * d, b = hash2(k, 3) * TAU; if (x < x0 - 50 || x > x1 + 50 || y < y0 - 50 || y > y1 + 50) continue;
       c.moveTo(x, y); c.lineTo(x + Math.cos(b) * 26, y + Math.sin(b) * 26); c.lineTo(x + Math.cos(b) * 26 + Math.cos(b + 1.1) * 20, y + Math.sin(b) * 26 + Math.sin(b + 1.1) * 20); c.moveTo(x, y); c.lineTo(x + Math.cos(b + 2.2) * 22, y + Math.sin(b + 2.2) * 22); }
     c.stroke();
   }
@@ -1294,23 +1310,31 @@ function render(dt) {
     c.fillStyle = hard ? 'rgba(255,138,60,.95)' : 'rgba(200,32,43,.8)'; c.strokeStyle = INK; c.lineWidth = 2; c.beginPath(); c.arc(joy.ox + dx * k, joy.oy + dy * k, hard ? 24 : 20, 0, TAU); c.fill(); c.stroke();
   }
 }
-function drawMap(cnv, big) {
-  const g = cnv.getContext('2d'), S = cnv.width, k = S / (2 * R * 1.04), u = S / 264, px = x => S / 2 + x * k;
-  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S); g.imageSmoothingEnabled = true; g.drawImage(miniBase, 0, 0, S, S);
-  g.strokeStyle = INK; g.lineWidth = 2 * u; g.beginPath(); g.arc(S / 2, S / 2, R * k, 0, TAU); g.stroke();
-  if (big) { g.fillStyle = '#fffaf0'; g.strokeStyle = INK; g.lineWidth = u; for (const o of RAMPS) { g.save(); g.translate(px(o.x), px(o.y)); g.rotate(o.a); g.beginPath(); g.moveTo(4.5 * u, 0); g.lineTo(-3 * u, -3.4 * u); g.lineTo(-3 * u, 3.4 * u); g.closePath(); g.fill(); g.stroke(); g.restore(); } } // ramps, pointing the way they throw
-  if (st === 'play' || st === 'pause') { g.fillStyle = SHEMAGH; for (const o of CANS) if (!o.off) { g.beginPath(); g.arc(px(o.x), px(o.y), 2.6 * u, 0, TAU); g.fill(); }
-    g.fillStyle = '#ffd23c'; g.strokeStyle = INK; g.lineWidth = u; for (const o of GOLD) if (!o.off) { g.beginPath(); g.arc(px(o.x), px(o.y), 3.1 * u, 0, TAU); g.fill(); g.stroke(); } }
-  g.font = `800 ${Math.round(big ? 9 * u : 10 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  SITES.forEach((s, i) => { const on = save.cards.includes(s.id), r = (big ? 7 : 5.5) * u;
-    g.fillStyle = on ? '#1f7a74' : '#d9b57f'; g.strokeStyle = INK; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(px(s.x), px(s.y), r, 0, TAU); g.fill(); g.stroke();
-    g.fillStyle = on ? '#fffaf0' : INK; g.fillText(big ? String(i + 1) : on ? '' : '?', px(s.x), px(s.y) + 0.5 * u); });
-  if (run.race && (st === 'play' || st === 'pause') && run.ri < run.race.pts.length) { // the race route still to drive
-    g.strokeStyle = '#fffaf0'; g.lineWidth = 2.2 * u; g.setLineDash([5 * u, 4 * u]); g.beginPath(); g.moveTo(px(car.x), px(car.y)); for (let i = run.ri; i < run.race.pts.length; i++) { const q = site(run.race.pts[i]); g.lineTo(px(q.x), px(q.y)); } g.stroke(); g.setLineDash([]);
-    const q = site(run.race.pts[run.ri]); g.strokeStyle = SHEMAGH; g.lineWidth = 3 * u; g.beginPath(); g.arc(px(q.x), px(q.y), (9 + Math.sin(t * 6) * 2) * u, 0, TAU); g.stroke();
+const RADAR = 2600; // how far the round map in the corner sees, each way from the car
+function drawMap(cnv, big) { // big: the whole reserve, for the map sheet. Otherwise the round map: north up, the car in the middle
+  const g = cnv.getContext('2d'), S = cnv.width, u = S / 264, live = st === 'play' || st === 'pause', cx = big ? 0 : car.x, cy = big ? 0 : car.y;
+  const k = S / (big ? 2 * R * 1.04 : 2 * RADAR), px = x => S / 2 + (x - cx) * k, py = y => S / 2 + (y - cy) * k, e = k * 2 * R * 1.04 / MS, lim = S / 2 - 9 * u;
+  const seen = (x, y) => big || (Math.abs(x - cx) < RADAR && Math.abs(y - cy) < RADAR);
+  const rim = (x, y) => { const dx = (x - cx) * k, dy = (y - cy) * k, d = Math.hypot(dx, dy); return d > lim ? [S / 2 + dx / d * lim, S / 2 + dy / d * lim, 1] : [S / 2 + dx, S / 2 + dy, 0]; }; // a far-off thing is pinned to the edge of the round map, in its direction
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S); if (!big) { g.fillStyle = '#785442'; g.fillRect(0, 0, S, S); } g.imageSmoothingEnabled = true;
+  g.setTransform(e, 0, 0, e, px(-R * 1.04), py(-R * 1.04)); g.drawImage(miniBase, 0, 0); g.setTransform(1, 0, 0, 1, 0, 0);
+  g.strokeStyle = INK; g.lineWidth = 2 * u; g.beginPath(); g.arc(px(0), py(0), R * k, 0, TAU); g.stroke();
+  g.fillStyle = '#fffaf0'; g.strokeStyle = INK; g.lineWidth = u; const ra = big ? 0.8 * u : u;
+  for (const o of RAMPS) if (seen(o.x, o.y)) { g.save(); g.translate(px(o.x), py(o.y)); g.rotate(o.a); g.beginPath(); g.moveTo(4.5 * ra, 0); g.lineTo(-3 * ra, -3.4 * ra); g.lineTo(-3 * ra, 3.4 * ra); g.closePath(); g.fill(); g.stroke(); g.restore(); } // ramps, pointing the way they throw
+  if (live) { let best = null, bd = 1e9, any = false; g.fillStyle = SHEMAGH; g.strokeStyle = '#fffaf0'; g.lineWidth = 1.2 * u;
+    for (const o of CANS) if (!o.off) { const d = Math.hypot(o.x - cx, o.y - cy); if (d < bd) { bd = d; best = o; } if (!seen(o.x, o.y)) continue; if (d * k < lim) any = true; g.beginPath(); g.arc(px(o.x), py(o.y), (big ? 2.6 : 4) * u, 0, TAU); g.fill(); g.stroke(); }
+    if (!big && !any && best) { const q = rim(best.x, best.y); g.beginPath(); g.arc(q[0], q[1], 4 * u, 0, TAU); g.fill(); g.stroke(); } // no jerrycan in sight: the nearest one shows at the edge, the way to drive for it
+    g.fillStyle = '#ffd23c'; g.strokeStyle = INK; g.lineWidth = u; for (const o of GOLD) if (!o.off && seen(o.x, o.y)) { g.beginPath(); g.arc(px(o.x), py(o.y), (big ? 3.1 : 4) * u, 0, TAU); g.fill(); g.stroke(); } }
+  g.font = `800 ${Math.round(big ? 9 * u : 12 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  SITES.forEach((s, i) => { const on = save.cards.includes(s.id), home = !big && s.id === 'camp', r = (big ? 7 : 7.5) * u; if (!home && !seen(s.x, s.y)) return; const q = home ? rim(s.x, s.y) : [px(s.x), py(s.y), 0]; // the camp never leaves the round map
+    g.fillStyle = on ? '#1f7a74' : '#d9b57f'; g.strokeStyle = q[2] ? '#fffaf0' : INK; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(q[0], q[1], q[2] ? r * 0.8 : r, 0, TAU); g.fill(); g.stroke();
+    g.fillStyle = on ? '#fffaf0' : INK; g.fillText(big ? String(i + 1) : on ? '' : '?', q[0], q[1] + 0.5 * u); });
+  if (run.race && live && run.ri < run.race.pts.length) { // the race route still to drive
+    g.strokeStyle = '#fffaf0'; g.lineWidth = 2.2 * u; g.setLineDash([5 * u, 4 * u]); g.beginPath(); g.moveTo(px(car.x), py(car.y)); for (let i = run.ri; i < run.race.pts.length; i++) { const q = site(run.race.pts[i]); g.lineTo(px(q.x), py(q.y)); } g.stroke(); g.setLineDash([]);
+    const q = site(run.race.pts[run.ri]), w = big ? [px(q.x), py(q.y)] : rim(q.x, q.y); g.strokeStyle = SHEMAGH; g.lineWidth = 3 * u; g.beginPath(); g.arc(w[0], w[1], (9 + Math.sin(t * 6) * 2) * u, 0, TAU); g.stroke();
   }
-  if (st === 'play' || st === 'pause') { g.save(); g.translate(px(car.x), px(car.y)); g.rotate(car.ang); g.fillStyle = SHEMAGH; g.strokeStyle = '#fffaf0'; g.lineWidth = 1.6 * u;
-    g.beginPath(); g.moveTo(9 * u, 0); g.lineTo(-6 * u, -6 * u); g.lineTo(-3 * u, 0); g.lineTo(-6 * u, 6 * u); g.closePath(); g.fill(); g.stroke(); g.restore(); }
+  if (live) { g.save(); g.translate(px(car.x), py(car.y)); g.rotate(car.ang); g.fillStyle = SHEMAGH; g.strokeStyle = '#fffaf0'; g.lineWidth = 1.6 * u; const a = big ? 0.8 * u : 1.15 * u;
+    g.beginPath(); g.moveTo(9 * a, 0); g.lineTo(-6 * a, -6 * a); g.lineTo(-3 * a, 0); g.lineTo(-6 * a, 6 * a); g.closePath(); g.fill(); g.stroke(); g.restore(); }
 }
 function hud() { // only touch the page when a value changes
   if (run.race) { const key = (run.rt * 10 | 0) + '|' + run.ri; if (key === hudKey) return; hudKey = key; $('mDist').textContent = fmtTime(run.rt); $('mDates').textContent = (run.ri - 1) + '/' + (run.race.pts.length - 1); return; }
@@ -1346,7 +1370,7 @@ function toggleMute() { save.muted = !save.muted; persist(); unlockAudio(); mute
 function dayGift() { // once a day: the gift for coming back, and word that the sand has been dealt afresh
   const today = dayKey(); if (save.day === today) return;
   const y = new Date(), back = !!save.day; y.setDate(y.getDate() - 1); save.streak = save.day === dayKey(y) ? save.streak + 1 : 1; save.day = today;
-  const c = 15 * Math.min(7, save.streak); save.coins += c; persist(); coinsUI(); note(T('daily', save.streak, c) + (back ? ' · ' + T('newSand') : ''), 'card', back ? 6 : 4.5);
+  const c = 15 * Math.min(7, save.streak); save.coins += c; persist(); coinsUI(); note(T('daily', save.streak, c) + (back ? ' · ' + T('newSand') : ''), 'card', back ? 6 : 4.5); return true;
 }
 function newDay() { if (dayKey() === worldDay) return; dealDay(); dayGift(); } // the game was left open past midnight: checked between runs, never during one
 function resetWorld() { for (const a of [DATES, CANS, GOLD, HOOPS]) for (const o of a) o.off = false; for (const o of PADS) o.cd = 0; }
@@ -1515,7 +1539,7 @@ const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); tutKey = ''; coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
@@ -1536,7 +1560,8 @@ new ResizeObserver(resize).observe(cv); // after layout, before paint: the pictu
   prog(1); $('ldMsg').textContent = T('ready'); await nextFrame();
   const today = dayKey(); for (const o of [save.medals, save.times, ghosts]) for (const k of Object.keys(o)) if (k.startsWith('daily:') && k !== 'daily:' + today) delete o[k];
   fillMissions(); showMenu(); $('loader').classList.add('done');
-  dayGift(); setTimeout(() => { $('loader').hidden = true; }, 500);
+  const gift = dayGift(); setTimeout(() => { $('loader').hidden = true; }, 500);
+  if (grew) setTimeout(() => { if (st === 'menu') note(T('grew'), 'card', 8); }, gift ? 6400 : 900); // after the daily gift's note, if there was one
   if (!hasStoredLang()) show('langPick', true);
   if (IOS && !APP) show('iosHint', true);
   // offline cache, and a note when a new version has been installed

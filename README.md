@@ -17,7 +17,14 @@ A free-roam dune safari for the browser, and a sister game to *Run, Abood!* and 
 
 ## The map
 
-The reserve is a circle 6.8 km of pixels across, ringed by red flags. A round map sits in the top corner during a run (tap it for the big map): it shows the dunes, the car as a red arrow, jerrycans as red dots, golden dates as yellow dots, and the 11 places; the big map also marks the ramps. The first visit to a place gives its postcard and dirhams.
+The reserve is a circle 13.6 km of pixels across, ringed by red flags: about 20 seconds from the camp to the rim at full speed, and 10 to 15 seconds from the camp to most places. The camp and the old well are in the middle; the other nine places stand in a wide ring further out. The first visit to a place gives its postcard and dirhams, more the further out it is.
+
+There are two maps:
+
+- **The round map** in the top corner during a run shows the sand around the car, north up, 2.6 km each way: the dunes, the car as a red arrow in the middle, jerrycans as red dots, golden dates as yellow dots, ramps as white arrows, and any place in range. The camp never leaves it: when it is out of range it sits on the edge, in its direction. So does the nearest jerrycan when none is in sight, and the next checkpoint in a race.
+- **The big map** (tap the round one) shows the whole reserve with every place numbered.
+
+Someone who played on the smaller reserve keeps their postcards, medals, dirhams and levels. Best race times and ghosts start again, because every route is longer, and a note says so once.
 
 | Place | What is there |
 |---|---|
@@ -37,12 +44,13 @@ Camels and oryx wander near home and trot away from a fast car.
 
 Between the places the sand is a playground:
 
-- **Big dunes:** besides Tal Moreeb there are four more big dunes without a name, one in each quarter, 120 to 150 high.
-- **Ramps:** 18 wooden kickers, each turned to face the longest drop near it. Drive up one the way its arrows point and it throws the car; the faster in, the higher out. The first is a short drive from the camp.
+- **Big dunes:** besides Tal Moreeb there are sixteen more big dunes without a name, four round the camp and twelve further out, 110 to 160 high.
+- **Ramps:** 56 wooden kickers, each turned to face the longest drop near it, with a clear run-up and a clear landing. Drive up one the way its arrows point and it throws the car; the faster in, the higher out. The first is a short drive from the camp.
 - **Hoops:** every second ramp has a red and white hoop to fly through, worth 120 stunt points once a run.
-- **Boost strips:** 12 strips of arrows on the sand give a shove the way they point. Some sit on the run-up to a ramp, so strip, ramp and hoop make one line.
-- **Golden dates:** worth ten dates each. One sits on top of each big dune, and four more move to new places every day.
-- **Today's sand:** the 48 lines of dates and 15 of the 16 jerrycans are placed from the date, so every day is a different map to learn, and everyone playing that day has the same one. The trail of six dates out of the camp, the first jerrycan, and every ramp, hoop and boost strip stay where they are. If the game is left open past midnight the new day is dealt between runs, never during one.
+- **Boost strips:** about 40 strips of arrows on the sand give a shove the way they point. Some sit on the run-up to a ramp, so strip, ramp and hoop make one line.
+- **Golden dates:** worth ten dates each. One sits on top of each big dune, and eight more move to new places every day.
+- **Fuel:** there are only 12 jerrycans in the whole reserve, well apart, so fuel has to be looked for on the map. From most places the nearest is about 5 seconds' drive away, from the emptiest corners about 10.
+- **Today's sand:** the 180 lines of dates and 11 of the 12 jerrycans are placed from the date, so every day is a different map to learn, and everyone playing that day has the same one. The trail of six dates out of the camp, the first jerrycan, and every ramp, hoop and boost strip stay where they are. If the game is left open past midnight the new day is dealt between runs, never during one.
 
 ## Stunts
 
@@ -60,7 +68,7 @@ What keeps a run worth starting once every postcard is found:
 - **Missions:** dealt at random from 36 kinds, three at a time, a fourth from level 4 and a fifth from level 8. The first three are on the screen all through a run, each as a bar that fills. A finished one is ticked, then replaced a moment later in the same run by a new one that counts from that moment, and every third mission finished in one run pays a bonus. A replacement is never a kind you just had, and the set is spread over six categories: collecting (dates, dates in the first minute, jerrycans, dirhams earned, golden dates), driving (distance, distance without rolling, top speed, distance from the camp, boost strips), stunts (air time, one long jump, drift points, one big drift, donuts, two wheels in total and in one go, flips, spins, stunt points, combo, ramps, hoops), exploring (places visited, drive to a named place, reach one against the clock, a delivery between two places, the Tal Moreeb summit, find the sand gazelles), races (finish one, win a medal) and five that add up over several runs.
 - **Harder with level:** targets grow with your level up to a cap; each mission is one, two or three stars, and three-star missions go from about 1 in 12 at level 1 to nearly half from level 14 (an easy one is set as if two levels lower, a hard one four higher, and pays half as much again); and from level 5 some carry a twist: do it without rolling. A mission you do not fancy can be swapped in the Missions sheet for a few dirhams. The table of kinds is `MK` in `js/game.js`.
 - **Levels:** missions, postcards, races and every run give experience; each level needs more than the last (125, 190, 265 … ). Each level pays dirhams, tops up the tank if it comes mid-run, and moves you up five ranks from Beginner to Desert falcon. Most levels open something: races at 2, 4, 5 and 7, the pickup at 3, a fourth mission at 4, the sand buggy at 6, a fifth mission at 8, the monster truck at 10. The results card and the Missions sheet always show the bar and the next thing it unlocks.
-- **Races:** drive through places in order against the clock for bronze, silver and gold. Five fixed races unlock by level, and a race of the day changes daily. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
+- **Races:** drive through places in order against the clock for bronze, silver and gold. Five fixed races unlock by level, from half a minute to about two minutes long, and a race of the day changes daily: a tour of four places near each other. Gold needs a clean drive: the medal times are set from a pace of 160, 220 and 285 pixels a second, and a straight drive in the first car holds about 330. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
 - **Daily gift:** dirhams for the first visit each day, growing over seven days in a row. The same note tells a returning player that the sand has been dealt afresh.
 - **Upgrades:** engine, tyres, balance, tank and date basket, five levels each (100, 250, 500, 900, 1,500).
 
