@@ -26,6 +26,23 @@ There are two maps:
 
 Someone who played on the smaller reserve keeps their postcards, medals, dirhams and levels. Best race times and ghosts start again, because every route is longer, and a note says so once.
 
+### Regions
+
+Round the home sands the reserve is cut into five regions, like slices of a pie. Each has its own dunes, sand colour and feel under the wheels, and its own share of what is scattered. The borders blend over a few hundred pixels and bend, a banner names a region as the car crosses into it, and the big map shows them by colour and name.
+
+| Region | Where | The ground | What it is for |
+|---|---|---|---|
+| Home sands | Round the camp, out to about 2 km | The dunes as they have always been | A first run, and the first lesson |
+| Salt plain | North | Pale and almost flat; the fastest ground, a little loose sideways | Top speed and long drifts |
+| Moreeb dunes | East | Red sand; every dune tall, a third taller than anywhere else | Air time and stunt points |
+| Empty Quarter | South | Gold sand; dunes riding on great ridges three dunes apart; soft sand that slows the car | Fuel planning: few jerrycans, and more golden dates than anywhere else |
+| Gravel plain | South-west | Grey-brown, low and firm, with more grip | Animals, and fast level driving |
+| Oasis belt | West | Greener sand, low dunes, palms standing alone to weave between | Dates: more than twice as many as anywhere else |
+
+On the level the first car tops out near 430 pixels a second on the home sands, 530 on the salt, 480 on the gravel and 350 in the Empty Quarter. One function, `region()` in `js/game.js`, says how much of each region a point is; the terrain, the tile colours, the driving and the scatter all read it. Regions change how tall the dunes are, never their spacing or direction, so crest lines cross a border unbroken.
+
+### Places
+
 | Place | What is there |
 |---|---|
 | The camp | Black tent, sadu rug, coffee fire, Baba. Every run starts here |
@@ -65,7 +82,7 @@ Every stunt scores points, shown above the car. Fifty points are worth one dirha
 
 What keeps a run worth starting once every postcard is found:
 
-- **Missions:** dealt at random from 36 kinds, three at a time, a fourth from level 4 and a fifth from level 8. The first three are on the screen all through a run, each as a bar that fills. A finished one is ticked, then replaced a moment later in the same run by a new one that counts from that moment, and every third mission finished in one run pays a bonus. A replacement is never a kind you just had, and the set is spread over six categories: collecting (dates, dates in the first minute, jerrycans, dirhams earned, golden dates), driving (distance, distance without rolling, top speed, distance from the camp, boost strips), stunts (air time, one long jump, drift points, one big drift, donuts, two wheels in total and in one go, flips, spins, stunt points, combo, ramps, hoops), exploring (places visited, drive to a named place, reach one against the clock, a delivery between two places, the Tal Moreeb summit, find the sand gazelles), races (finish one, win a medal) and five that add up over several runs.
+- **Missions:** dealt at random from 41 kinds, three at a time, a fourth from level 4 and a fifth from level 8. The first three are on the screen all through a run, each as a bar that fills. A finished one is ticked, then replaced a moment later in the same run by a new one that counts from that moment, and every third mission finished in one run pays a bonus. A replacement is never a kind you just had, and the set is spread over six categories: collecting (dates, dates in the first minute, jerrycans, dirhams earned, golden dates, dates in the oasis belt), driving (distance, distance without rolling, top speed, distance from the camp, boost strips, distance in the Empty Quarter), stunts (air time, one long jump, drift points, one big drift, donuts, two wheels in total and in one go, flips, spins, stunt points, combo, ramps, hoops, drift points on the salt plain, air time in the Moreeb dunes), exploring (places visited, drive to a named place, reach one against the clock, a delivery between two places, the Tal Moreeb summit, find the sand gazelles, regions driven in), races (finish one, win a medal) and five that add up over several runs.
 - **Harder with level:** targets grow with your level up to a cap; each mission is one, two or three stars, and three-star missions go from about 1 in 12 at level 1 to nearly half from level 14 (an easy one is set as if two levels lower, a hard one four higher, and pays half as much again); and from level 5 some carry a twist: do it without rolling. A mission you do not fancy can be swapped in the Missions sheet for a few dirhams. The table of kinds is `MK` in `js/game.js`.
 - **Levels:** missions, postcards, races and every run give experience; each level needs more than the last (125, 190, 265 … ). Each level pays dirhams, tops up the tank if it comes mid-run, and moves you up five ranks from Beginner to Desert falcon. Most levels open something: races at 2, 4, 5 and 7, the pickup at 3, a fourth mission at 4, the sand buggy at 6, a fifth mission at 8, the monster truck at 10. The results card and the Missions sheet always show the bar and the next thing it unlocks.
 - **Races:** drive through places in order against the clock for bronze, silver and gold. Five fixed races unlock by level, from half a minute to about two minutes long, and a race of the day changes daily: a tour of four places near each other. Gold needs a clean drive: the medal times are set from a pace of 160, 220 and 285 pixels a second, and a straight drive in the first car holds about 330. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.

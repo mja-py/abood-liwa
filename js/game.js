@@ -69,12 +69,34 @@ function ridge(u, a) { const s = u - Math.floor(u); return s < a ? 0.5 - 0.5 * M
 // one real dune in cross-section, u running downwind: a long windward ramp that is still climbing when it reaches the crest, so the
 // crest is a lip to fly off, then the slip face, steepest at the top and easing out into the trough. a is the windward share.
 function dune(u, a) { const s = u - Math.floor(u); if (s < a) { const t = s / a; return t * t * (2 - t); } return Math.pow(1 - (s - a) / (1 - a), 1.45); }
-function H(x, y) {
-  const w = vn(x * 0.0011 + 7.3, y * 0.0011 - 2.1) - 0.5;
-  const amp = 0.45 + 0.55 * sstep(0.28, 0.66, vn(x * 0.0006 - 4.2, y * 0.0006 + 9.7)); // low dunes in some parts of the reserve, tall ones in others
-  let h = dune((x * WX + y * WY) / 560 + w * 0.7, 0.68) * 95 * amp // the bend in the crest lines is kept gentle enough that every slip face looks downwind
-    + ridge((x * 0.5 - y * 0.866) / 250 + w * 0.9 + 3.1, 0.66) * 12 * (0.4 + amp * 0.6)
-    + vn(x * 0.0024 + 1.7, y * 0.0024 + 5.1) * 12;
+// ---------- regions ----------
+// The reserve is six kinds of ground: the home sands round the camp, and five regions round them like slices of a pie. Each has its own
+// dune height, sand colour, feel under the wheels and share of what is scattered. region() says how much of each a point is: six weights
+// that add up to 1. They blend over a few hundred pixels at a border, and a slow noise bends the borders so none is a straight line.
+// Slices by bearing, clockwise from north: salt plain 320-20, Moreeb dunes 20-110, Empty Quarter 110-200, gravel plain 200-260, oasis belt 260-320.
+const REG = ['home', 'salt', 'moreeb', 'empty', 'gravel', 'oasis'], RW = new Float32Array(6); // RW: the answer to the last region() call
+const R_IN = 1500, R_OUT = 2400, R_BW = 7; // the home sands end between these two distances from the camp; half the width of a border between two slices, in degrees
+function region(x, y) {
+  const d2 = x * x + y * y; RW[0] = 1; RW[1] = RW[2] = RW[3] = RW[4] = RW[5] = 0; if (d2 < 1.5625e6) return RW; // within 1250 of the camp it is all home sands, whatever the noise says
+  const n = vn(x * 0.0009 + 3.3, y * 0.0009 - 8.1) - 0.5, o = sstep(R_IN, R_OUT, Math.sqrt(d2) + n * 500); if (o <= 0) return RW;
+  let b = (Math.atan2(x, -y) * 57.29578 + 400 + n * 16) % 360; // the bearing, turned so that the salt plain starts at 0
+  const s1 = sstep(60 - R_BW, 60 + R_BW, b), s2 = sstep(150 - R_BW, 150 + R_BW, b), s3 = sstep(240 - R_BW, 240 + R_BW, b), s4 = sstep(300 - R_BW, 300 + R_BW, b), f0 = sstep(-R_BW, R_BW, b), f1 = sstep(360 - R_BW, 360 + R_BW, b);
+  RW[0] = 1 - o; RW[1] = o * (f0 * (1 - s1) + f1); RW[2] = o * s1 * (1 - s2); RW[3] = o * s2 * (1 - s3); RW[4] = o * s3 * (1 - s4); RW[5] = o * (s4 * (1 - f1) + 1 - f0);
+  return RW;
+}
+const regAt = (x, y) => { region(x, y); let b = 0; for (let i = 1; i < 6; i++) if (RW[i] > RW[b]) b = i; return b; }; // which region a point mostly is
+function H(x, y) { // leaves the point's region weights in RW
+  region(x, y);
+  const w = vn(x * 0.0011 + 7.3, y * 0.0011 - 2.1) - 0.5, u = (x * WX + y * WY) / 560 + w * 0.7;
+  const a0 = 0.45 + 0.55 * sstep(0.28, 0.66, vn(x * 0.0006 - 4.2, y * 0.0006 + 9.7)); // low dunes in some parts of the reserve, tall ones in others
+  // The regions change how tall the dunes stand, never how far apart they are or which way they run: a crest line crosses a border unbroken.
+  // Salt plain: almost flat. Moreeb dunes: always tall, a third taller than anywhere else. Empty Quarter: ordinary dunes riding on great
+  // ridges three dunes apart. Gravel plain: low and lumpy. Oasis belt: half height.
+  const amp = a0 * (RW[0] + RW[1] * 0.1 + RW[3] * 0.8 + RW[4] * 0.3 + RW[5] * 0.55) + RW[2] * (0.62 + 0.38 * a0) * 1.32;
+  let h = dune(u, 0.68) * 95 * amp // the bend in the crest lines is kept gentle enough that every slip face looks downwind
+    + ridge((x * 0.5 - y * 0.866) / 250 + w * 0.9 + 3.1, 0.66) * 12 * (0.4 + amp * 0.6) * (1 - 0.8 * RW[1])
+    + vn(x * 0.0024 + 1.7, y * 0.0024 + 5.1) * 12 * (1 - 0.6 * RW[1] + 0.5 * RW[4]);
+  if (RW[3] > 0) h += dune(u / 3 + 0.37, 0.72) * 105 * RW[3];
   const gi = Math.floor(x / GC) + GH, gj = Math.floor(y / GC) + GH;
   if (gi >= 0 && gi < GN && gj >= 0 && gj < GN) { const near = BUMPS[gj * GN + gi];
     for (let n = 0; n < near.length; n++) { const q = near[n], dx = x - q.x, dy = y - q.y, d2 = dx * dx + dy * dy; if (d2 >= q.c2) continue;
@@ -89,11 +111,17 @@ function H(x, y) {
 
 // ---------- ground tiles: height-shaded sand, baked once and cached ----------
 const TS = 256, TP = 128, TILE_MAX = 150, LX = -0.5, LY = -0.62, LZ = 0.6;
-const tiles = new Map(), HG = new Float32Array((TP + 2) * (TP + 2));
+const tiles = new Map(), HG = new Float32Array((TP + 2) * (TP + 2)), RG = new Float32Array((TP + 2) * (TP + 2) * 6); // heights and region weights of the tile being baked
 let bakeBudget = 0;
-function sand(k, out, o) { // k 0..1 = shadow..lit
-  if (k < 0.5) { const f = k * 2; out[o] = 168 + 61 * f; out[o + 1] = 98 + 74 * f; out[o + 2] = 58 + 46 * f; }
-  else { const f = (k - 0.5) * 2; out[o] = 229 + 23 * f; out[o + 1] = 172 + 56 * f; out[o + 2] = 104 + 66 * f; }
+// Each region's sand in shadow, in between, and in the light, in the order of REG: the home sands as they have always been, the salt
+// plain pale, the Moreeb dunes red, the Empty Quarter gold, the gravel plain grey-brown, the oasis belt a greener tan.
+const PAL = [[168, 98, 58, 229, 172, 104, 252, 228, 170], [170, 146, 120, 230, 216, 192, 251, 245, 230], [146, 66, 38, 219, 134, 72, 250, 200, 132],
+  [182, 112, 44, 242, 190, 96, 255, 238, 166], [124, 102, 84, 188, 166, 136, 224, 210, 182], [140, 106, 58, 204, 178, 106, 234, 226, 164]], PM = new Float32Array(9);
+function sand(k, out, o, w, q) { // k 0..1 = shadow..lit; w[q..q+5]: the region weights of this point
+  for (let i = 0; i < 9; i++) PM[i] = 0;
+  for (let r = 0; r < 6; r++) { const v = w[q + r]; if (v > 0.004) { const c = PAL[r]; for (let i = 0; i < 9; i++) PM[i] += c[i] * v; } }
+  if (k < 0.5) { const f = k * 2; out[o] = PM[0] + (PM[3] - PM[0]) * f; out[o + 1] = PM[1] + (PM[4] - PM[1]) * f; out[o + 2] = PM[2] + (PM[5] - PM[2]) * f; }
+  else { const f = (k - 0.5) * 2; out[o] = PM[3] + (PM[6] - PM[3]) * f; out[o + 1] = PM[4] + (PM[7] - PM[4]) * f; out[o + 2] = PM[5] + (PM[8] - PM[5]) * f; }
 }
 function shadeAt(dx, dy, c, wx, wy, curv = 0) { // curv: how sharply the ground bends here; a crest catches the light, a trough sits a little darker
   const sh = (-dx * LX - dy * LY + LZ) / Math.sqrt(dx * dx + dy * dy + 1);
@@ -103,11 +131,12 @@ function shadeAt(dx, dy, c, wx, wy, curv = 0) { // curv: how sharply the ground 
 const SAB = site('sabkha');
 function bakeTile(ix, iy) {
   const cv = mk(TP, TP), g = cv.getContext('2d'), img = g.createImageData(TP, TP), px = img.data, N = TP + 2, st = TS / TP;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) HG[j * N + i] = H(ix * TS + (i - 0.5) * st, iy * TS + (j - 0.5) * st);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const p = j * N + i; HG[p] = H(ix * TS + (i - 0.5) * st, iy * TS + (j - 0.5) * st); RG.set(RW, p * 6); }
   for (let j = 0; j < TP; j++) for (let i = 0; i < TP; i++) {
     const p = (j + 1) * N + i + 1, o = (j * TP + i) * 4, wx = ix * TS + (i + 0.5) * st, wy = iy * TS + (j + 0.5) * st;
     const k = shadeAt((HG[p + 1] - HG[p - 1]) / (2 * st), (HG[p + N] - HG[p - N]) / (2 * st), HG[p], wx, wy, HG[p + 1] + HG[p - 1] + HG[p + N] + HG[p - N] - 4 * HG[p]);
-    sand(k, px, o);
+    sand(k, px, o, RG, p * 6);
+    const wg = RG[p * 6 + 4]; if (wg > 0.05) { const n = hash2(ix * TP + i, iy * TP + j); if (n > 0.9) { const f = 1 - (n > 0.975 ? -0.1 : 0.17) * wg; px[o] *= f; px[o + 1] *= f; px[o + 2] *= f; } } // gravel: a scatter of dark stones and a few pale ones
     const ds = Math.hypot(wx - SAB.x, wy - SAB.y);
     if (ds < SAB.r) { const f = sstep(SAB.r, SAB.r * 0.72, ds) * 0.85, v = 0.9 + 0.1 * k; px[o] += (236 * v - px[o]) * f; px[o + 1] += (226 * v - px[o + 1]) * f; px[o + 2] += (206 * v - px[o + 2]) * f; }
     const d = Math.hypot(wx, wy);
@@ -130,7 +159,7 @@ async function bakeMini(progress) {
   for (let j = 0; j < MS; j++) { for (let i = 0; i < MS; i++) hg[j * MS + i] = H((i + 0.5 - MS / 2) * k, (j + 0.5 - MS / 2) * k); if (j % 44 === 43) { progress(j / MS); await nextFrame(); } }
   for (let j = 1; j < MS - 1; j++) for (let i = 1; i < MS - 1; i++) {
     const wx = (i + 0.5 - MS / 2) * k, wy = (j + 0.5 - MS / 2) * k, d = Math.hypot(wx, wy), o = (j * MS + i) * 4, p = j * MS + i; if (d > R * 1.03) continue;
-    sand(shadeAt((hg[p + 1] - hg[p - 1]) / (2 * k) * 1.6, (hg[p + MS] - hg[p - MS]) / (2 * k) * 1.6, hg[p], wx, wy), px, o); px[o + 3] = 255;
+    sand(shadeAt((hg[p + 1] - hg[p - 1]) / (2 * k) * 1.6, (hg[p + MS] - hg[p - MS]) / (2 * k) * 1.6, hg[p], wx, wy), px, o, region(wx, wy), 0); px[o + 3] = 255;
     if (Math.hypot(wx - SAB.x, wy - SAB.y) < SAB.r * 0.8) { px[o] = 236; px[o + 1] = 226; px[o + 2] = 206; }
     if (d > R) { px[o] = 120; px[o + 1] = 84; px[o + 2] = 66; }
   }
@@ -668,20 +697,26 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
   q = site('festival'); P('stall', q.x, q.y - 30); P('palm', q.x - 122, q.y - 8); P('palm', q.x + 126, q.y, 1); P('basket', q.x + 44, q.y + 44); P('basket', q.x - 34, q.y + 54);
   q = site('gate'); P('gate', q.x, q.y); PROPS.push({ kind: 'post', x: q.x - 70, y: q.y, rad: 7, hide: 1 }, { kind: 'post', x: q.x + 70, y: q.y, rad: 7, hide: 1 });
   for (let k = 0; k < 340; k++) { const a = k / 340 * TAU; P('post', Math.cos(a) * (R + 12), Math.sin(a) * (R + 12)); } // the ring of flags round the reserve
-  for (let j = -25; j <= 25; j++) for (let i = -25; i <= 25; i++) { // scattered desert shrubs
-    if (hash2(i, j + 99) > 0.3) continue; const x = (i + hash2(i + 7, j)) * 280, y = (j + hash2(i, j - 7)) * 280;
-    if (Math.hypot(x, y) < R - 80 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + 30)) P('shrub', x, y, hash2(i, j) > 0.5);
+  // How much of each thing a region gets, in the order of REG, against 1 for the home sands: lines of dates, jerrycans, the golden dates
+  // that move each day, and shrubs. The oasis belt is rich in dates, the Empty Quarter is short of fuel and long on gold, nothing grows on the salt.
+  const D_DATE = [1, 0.35, 0.9, 0.55, 0.8, 2.2], D_CAN = [1, 1, 1, 0.3, 1, 1.2], D_GOLD = [0.5, 0.4, 0.6, 1, 0.4, 0.4], D_SHRUB = [1, 0, 0.6, 0.35, 1.6, 2.2];
+  const dens = (x, y, d) => { region(x, y); let v = 0; for (let i = 0; i < 6; i++) v += RW[i] * d[i]; return v; };
+  for (let j = -25; j <= 25; j++) for (let i = -25; i <= 25; i++) { // scattered desert shrubs, and in the oasis belt palms standing alone on the sand, to weave between
+    const x = (i + hash2(i + 7, j)) * 280, y = (j + hash2(i, j - 7)) * 280, clear = m => Math.hypot(x, y) < R - 80 - m && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + 30 + m);
+    if (hash2(i, j + 99) < 0.3 * dens(x, y, D_SHRUB) && clear(0)) P('shrub', x, y, hash2(i, j) > 0.5);
+    else if (RW[5] > 0.75 && hash2(i + 31, j - 17) < 0.2 && clear(120)) P('palm', x, y, hash2(i, j) > 0.5);
   }
   // What is scattered on the sand: 180 lines of dates curving across the dunes, and 12 jerrycans a long way apart, a few more of them
   // towards the middle than out by the rim. Fuel has to be looked for on the map. The first jerrycan is always in the same place near
   // the camp, so a first run can always reach one.
   const scatter = r => { const dates = [], cans = [{ x: 540, y: -280 }];
-    for (let k = 0; k < 180; k++) {
-      const a = r() * TAU, d = 300 + Math.sqrt(r()) * (R - 560), bend = (r() - 0.5) * 0.3, n = 5 + (r() * 3 | 0); let x = Math.cos(a) * d, y = Math.sin(a) * d, an = r() * TAU;
+    for (let k = 0, tries = 0; k < 180 && tries < 4000; tries++) {
+      const a = r() * TAU, d = 300 + Math.sqrt(r()) * (R - 560); let x = Math.cos(a) * d, y = Math.sin(a) * d; if (r() * 2.2 > dens(x, y, D_DATE)) continue; k++;
+      const bend = (r() - 0.5) * 0.3, n = 5 + (r() * 3 | 0); let an = r() * TAU;
       for (let i = 0; i < n; i++) { if (Math.hypot(x, y) < R - 120) dates.push({ x, y }); an += bend; x += Math.cos(an) * 48; y += Math.sin(an) * 48; }
     }
     for (let tries = 0; cans.length < 12 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.pow(r(), 0.7) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
-      if (cans.every(o => Math.hypot(o.x - x, o.y - y) > 2400) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
+      if (r() * 1.2 < dens(x, y, D_CAN) && cans.every(o => Math.hypot(o.x - x, o.y - y) > 2400) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
     return { dates, cans }; };
   // The dates and jerrycans are dealt afresh every day (dealDay, below). The playground has its own fixed stream of numbers, so it never moves.
   const r = rng(20261119);
@@ -713,7 +748,7 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
     DATES.length = 0; for (let i = 0; i < 6; i++) DATES.push({ x: 170 + i * 48, y: 91 - i * 13.8 }); for (const o of s.dates) DATES.push(o); // the lesson's trail lies dead ahead of where the car starts (resetCar), so driving straight on collects all six
     CANS.length = 0; for (const o of s.cans) CANS.push(o);
     GOLD.length = 0; for (const q of HILLS) GOLD.push({ x: q.x, y: q.y });
-    for (let tries = 0; GOLD.length < HILLS.length + 8 && tries < 4000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 900)) GOLD.push({ x, y }); }
+    for (let tries = 0; GOLD.length < HILLS.length + 8 && tries < 4000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (g() < dens(x, y, D_GOLD) && open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 900)) GOLD.push({ x, y }); }
   };
   dealDay();
   const herd = (kind, id, n, spread) => { const s = typeof id === 'string' ? site(id) : id; for (let k = 0; k < n; k++) { const a = k / n * TAU + 0.6, x = s.x + Math.cos(a) * spread, y = s.y + Math.sin(a) * spread * 0.7;
@@ -721,6 +756,7 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
   herd('camel', 'camels', 5, 130); herd('oryx', 'oryx', 4, 110);
   herd('gazelle', { x: 1750, y: -330 }, 5, 90); herd('gazelle', { x: -1480, y: -1480 }, 4, 80); herd('gazelle', { x: -200, y: 950 }, 3, 70); herd('camel', { x: 1250, y: 380 }, 2, 60); // loose herds out on the sand
   herd('gazelle', { x: -3000, y: 1700 }, 5, 90); herd('gazelle', { x: 2300, y: -2300 }, 4, 80); herd('gazelle', { x: 900, y: 4800 }, 4, 80); herd('gazelle', { x: -1900, y: -3000 }, 4, 80); herd('camel', { x: -3300, y: -700 }, 3, 70); herd('oryx', { x: 3900, y: 1900 }, 3, 80); // and further out
+  herd('oryx', { x: -3600, y: 2900 }, 4, 90); herd('gazelle', { x: -2600, y: 4400 }, 5, 90); herd('camel', { x: -4600, y: 3300 }, 3, 70); // the gravel plain is where the animals are
 })();
 
 // ---------- state ----------
@@ -730,6 +766,10 @@ const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700, hop: 1.15, cl: 0
 const parts = [], floats = [], tracks = [[], [], [], []], keys = {}, joy = { on: false, hard: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 }; // tracks: two tyre marks, and two darker ones laid down while sliding
 const rings = []; let camZ = 1; // rings: circles of dust spreading on the sand; camZ: the view pulls back a little at speed and in the air
 let stallT = 0, hintT = 0; // stuck on a steep face with the engine pulling, and how long until the next hint about it
+// What the ground under the car changes, by region (in the order of REG): drag, soft-sand resistance, and sideways grip. On the level
+// the first car tops out near 430 on the home sands, 530 on the salt, 480 on the gravel and 350 in the soft sand of the Empty Quarter.
+const G_DRAG = [1, 0.84, 1, 1.12, 0.93, 1], G_RR = [1, 0.6, 1, 2.2, 0.6, 1], G_GRIP = [0, -0.4, 0, -0.3, 0.8, 0];
+let gDrag = 1, gRr = 1, gGrip = 0;
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // base values; see PH
    TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, HARD_R = 96, TIP = 0.4; // the pad: full throttle at JOY_R from where the finger went down; past HARD_R is pressing hard
 function resetCar() {
@@ -783,6 +823,7 @@ function addXP(n) {
 // level rises: targets grow, hard (three-star) missions get more likely, and from level 5 some must be done without rolling the car.
 // Categories: c collecting, d driving, s stunts, e exploring, r races, t adds up over several runs.
 const MK = {
+  regions: ['e', 2, 2, 0.3, 6, 1, 1.3], rdates: ['c', 2, 10, 3, 60, 5, 1.3], rdist: ['d', 3, 300, 80, 2500, 50, 1.3], rdrift: ['s', 3, 150, 40, 1500, 10, 1.4], rair: ['s', 3, 2.5, 0.5, 14, 0.5, 1.4], // the regions: see mRaw
   dates: ['c', 1, 20, 5, 100, 5, 1], rush: ['c', 3, 10, 2, 36, 1, 1.3], cans: ['c', 2, 1, 0.34, 6, 1, 1], earn: ['c', 4, 15, 4, 110, 5, 1.2], gold: ['c', 2, 1, 0.3, 5, 1, 1.4],
   dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 250, 35, 810, 10, 1],
   air: ['s', 1, 2.5, 0.5, 12, 0.5, 1.2], jump: ['s', 1, 0.6, 0.05, 1.6, 0.1, 1.2], drift: ['s', 1, 280, 80, 3000, 20, 1.2], bigdrift: ['s', 3, 120, 20, 500, 10, 1.3],
@@ -793,16 +834,16 @@ const MK = {
   race: ['r', 2, 1, 0, 1, 1, 1.3], medal: ['r', 3, 1, 0.2, 3, 1, 1.6],
   tdates: ['t', 2, 110, 30, 1e9, 10, 1.4], tdist: ['t', 2, 3600, 600, 1e9, 100, 1.4], tstunt: ['t', 3, 2500, 600, 1e9, 100, 1.4], tair: ['t', 3, 12, 2.5, 1e9, 1, 1.4], tvisit: ['t', 3, 8, 1.5, 1e9, 1, 1.4],
 };
-const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1, two: 1, twohold: 1 }; // how often each category is dealt; the kinds counted in tenths
+const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1, two: 1, twohold: 1, rair: 1 }; // how often each category is dealt; the kinds counted in tenths
 const slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
 // A mission can also be dealt in the middle of a run, to take the place of one just finished. It then counts from that moment: kinds that add
 // up (ADD) start from what the run has already done, and the others are only dealt if the run is still under half way to their target.
-const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal']);
+const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem', 'regions', 'rdates', 'rdist', 'rdrift', 'rair']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal']);
 function newMission(avoid, live) { // avoid: the kind being swapped away, which must not come straight back
   const L = save.lvl, act = save.missions.filter(m => !m.done), catN = c => act.filter(m => MK[m.t][0] === c).length, bad = live ? new Set(NOT_LIVE) : new Set();
   for (let tries = 0; ; tries++) { const m = dealMission(avoid, bad, L, act, catN); if (!live) return m;
     if (m.nr && run.rolls) delete m.nr; // a no-roll twist is no use in a run that has already rolled
-    const raw = mProg(m), left = { dates: DATES.filter(o => !o.off).length, cans: CANS.filter(o => !o.off).length, gold: GOLD.filter(o => !o.off).length, hoop: HOOPS.filter(o => !o.off).length, visit: SITES.length - Object.keys(run.seen).length, reem: ANIMALS.filter(a => a.kind === 'gazelle' && !a.seen).length }[m.t];
+    const raw = mProg(m), left = { dates: DATES.filter(o => !o.off).length, cans: CANS.filter(o => !o.off).length, gold: GOLD.filter(o => !o.off).length, hoop: HOOPS.filter(o => !o.off).length, visit: SITES.length - Object.keys(run.seen).length, regions: 6 - run.regN, reem: ANIMALS.filter(a => a.kind === 'gazelle' && !a.seen).length }[m.t];
     if (MK[m.t][0] === 't') m.p = -raw; else if (ADD.has(m.t)) { if (left !== undefined && left < m.n) { if (left < 1 || tries > 8) { bad.add(m.t); continue; } m.n = left; } m.o = raw; } else if (raw >= m.n * 0.5) { bad.add(m.t); continue; }
     return m; }
 }
@@ -829,6 +870,11 @@ function mProg(m) { const v = mRaw(m); return m.o ? Math.max(0, v - m.o) : v; }
 function mRaw(m) { // how far a mission has got, counting the run in progress
   const on = run.live; if (MK[m.t][0] !== 't' && (!on || (m.nr && run.rolls))) return 0; // after a roll, a no-roll mission starts again on the next run
   switch (m.t) {
+    case 'regions': return run.regN;          // how many of the six regions the run has driven in, the home sands included
+    case 'rdates': return run.rDates;         // dates picked up in the oasis belt
+    case 'rdist': return run.rDist / 8;       // metres driven in the Empty Quarter
+    case 'rdrift': return run.rDrift;         // drift points scored on the salt plain
+    case 'rair': return run.rAir;             // seconds of clean jumps landed in the Moreeb dunes
     case 'dates': return run.dates;
     case 'rush': return run.d60;
     case 'cans': return run.cans;
@@ -975,7 +1021,7 @@ function stunt(pts, label) {
 }
 function endDrift(clean) { // clean: the slide was driven out of, not ended by a jump or a roll
   if (!car.drift) return; car.drift = false;
-  if (car.dsc > 20) { run.drift += car.dsc; if (car.dsc > run.maxDrift) run.maxDrift = car.dsc; stunt(car.dsc, T('st_drift'));
+  if (car.dsc > 20) { run.drift += car.dsc; if (car.dsc > run.maxDrift) run.maxDrift = car.dsc; if (regAt(car.x, car.y) === 1) run.rDrift += car.dsc; stunt(car.dsc, T('st_drift'));
     if (clean && car.dsc > 45) { const b = Math.min(130, 35 + car.dsc * 0.3), cs = Math.cos(car.ang), sn = Math.sin(car.ang); // a good slide ends with a shove forward: the reason to drift, beyond the points
       car.vx += cs * b; car.vy += sn * b; car.boostT = 0.7; play('power', 1.5, 0.45); buzz(20); puff(car.x - cs * 40, car.y - sn * 40, -cs * 160, -sn * 160, 10, true); float(car.x, car.y - 100, T('st_boost'), '#bff0c0'); } }
   car.dsc = 0;
@@ -1021,7 +1067,8 @@ function update(dt) {
   car.steer += (steer - car.steer) * Math.min(1, dt * 9); car.thr = thr; car.safe -= dt;
   car.x += car.vx * dt; car.y += car.vy * dt;
   const e = 3, h0 = H(car.x, car.y), gx = (H(car.x + e, car.y) - H(car.x - e, car.y)) / (2 * e), gy = (H(car.x, car.y + e) - H(car.x, car.y - e)) / (2 * e);
-  let sp = Math.hypot(car.vx, car.vy); run.dist += sp * dt; run.nr += sp * dt; if (run.nr > run.noRoll) run.noRoll = run.nr;
+  region(car.x, car.y); gDrag = gRr = gGrip = 0; for (let i = 0; i < 6; i++) { gDrag += RW[i] * G_DRAG[i]; gRr += RW[i] * G_RR[i]; gGrip += RW[i] * G_GRIP[i]; }
+  let sp = Math.hypot(car.vx, car.vy); run.dist += sp * dt; run.nr += sp * dt; if (run.nr > run.noRoll) run.noRoll = run.nr; if (RW[3] > 0.5) run.rDist += sp * dt;
   // A ramp: crossed the right way, on the wheels or skimming just above the sand, it throws the car up. Faster in is higher out.
   if ((car.rampT -= dt) <= 0 && !car.roll && car.z - h0 < 16) for (const o of RAMPS) { const dx = car.x - o.x, dy = car.y - o.y; if (dx > 60 || dx < -60 || dy > 60 || dy < -60) continue;
     const al = dx * o.cs + dy * o.sn, vd = car.vx * o.cs + car.vy * o.sn; if (al < -14 || al > 40 || Math.abs(dy * o.cs - dx * o.sn) > 38 || vd < 120) continue;
@@ -1049,7 +1096,7 @@ function update(dt) {
         shake = Math.min(9, 3 + car.airT * 5); play('hit', 0.8, 0.6); puff(car.x, car.y, car.vx * 0.2, car.vy * 0.2, 8, true); buzz(30); ring(car.x, car.y, '#fff1d6', 22);
         if (upside || (car.safe <= 0 && ((Math.abs(l) > 0.5 * sp && sp > 150) || Math.abs(sl) > PH.tip + 0.13))) { if (gm > 0.08) startRoll(-gx, -gy); else startRoll(-sn * (l || 1), cs * (l || 1)); }
         else { // a clean landing banks the jump and any tricks done in it
-          run.air += car.airT; if (car.airT > run.maxAir) run.maxAir = car.airT;
+          run.air += car.airT; if (car.airT > run.maxAir) run.maxAir = car.airT; if (regAt(car.x, car.y) === 2) run.rAir += car.airT;
           let pts = car.airT * 40, label = T('jump', car.airT.toFixed(1));
           if (spins) { const deg = Math.abs(spins) * 180; pts += Math.abs(spins) * 70; label = deg + '!'; run.spins += Math.abs(spins) >> 1; }
           if (flips) { pts += Math.abs(flips) * 160; label = T(flips < 0 ? 'st_back' : 'st_front', Math.abs(flips)) + (spins ? ' ' + Math.abs(spins) * 180 : ''); run.flips += Math.abs(flips); }
@@ -1073,8 +1120,8 @@ function update(dt) {
     // so it climbs a slope of 1.46; the steepest slip face outside Tal Moreeb is 1.10. On the level the car pulls away as it always has.
     const up = sstep(0.1, 0.4, sf), low = 1 + up * (PH.cl + 1.4 * clamp(1 - Math.abs(f) / 170, 0, 1));
     const push = thr > 0 ? thr * PH.acc * low : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * (car.rev ? 0.8 : 0.5)) : 0;
-    f += (push - GR * sf - DRAG * f) * dt; f -= clamp(f, -PH.rr * dt, PH.rr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
-    l += -GR * sl * dt; l *= Math.exp(-(car.drift ? (want ? 1.05 + 3 * Math.max(0, slip - 0.85) : 3) : PH.grip) * dt); // the slope pulls sideways; the tyres only half hold in sand, hardly at all in a slide, and bite again once it is let go
+    f += (push - GR * sf - DRAG * gDrag * f) * dt; f -= clamp(f, -PH.rr * gRr * dt, PH.rr * gRr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
+    l += -GR * sl * dt; l *= Math.exp(-(car.drift ? (want ? 1.05 + 3 * Math.max(0, slip - 0.85) : 3) : PH.grip + gGrip) * dt); // the slope pulls sideways; the tyres only half hold in sand, hardly at all in a slide, and bite again once it is let go
     car.vx = cs * f - sn * l; car.vy = sn * f + cs * l; sp = Math.hypot(car.vx, car.vy);
     const gvz = gx * car.vx + gy * car.vy;
     if ((car.gvz - gvz) / dt > GRAV * (0.75 + 0.9 * sstep(400, 560, sp)) && sp > 120) { car.air = true; car.vz = car.gvz; car.airT = 0; car.z = h0; play('whoosh', 1, 0.7); } // the ground drops away faster than gravity: take off. Boosted well past its own top speed the car holds the sand harder, or it would skim every swell with no steering.
@@ -1131,7 +1178,7 @@ function update(dt) {
     if (dc < 60) bump(a, 8);
   }
   // pick-ups
-  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; play('date', 1 + (run.dates % 8) * 0.06); spark(o.x, o.y - 6, 3); } }
+  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; if (regAt(o.x, o.y) === 5) run.rDates++; play('date', 1 + (run.dates % 8) * 0.06); spark(o.x, o.y - 6, 3); } }
   for (const o of GOLD) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick + 1200) { o.off = true; run.dates += 10; run.gold++; play('power', 1.6); buzz(30); float(o.x, o.y - 44, T('goldPlus'), '#ffe07a'); spark(o.x, o.y - 10, 16); ring(o.x, o.y, '#ffe07a'); } }
   for (const o of PADS) { o.cd -= dt; if (o.cd > 0 || car.air || car.roll) continue; const dx = o.x - car.x, dy = o.y - car.y; // a boost strip: a shove the way its arrows point
     if (dx * dx + dy * dy < 2600) { o.cd = 2; car.vx += o.cs * 240; car.vy += o.sn * 240; car.boostT = 1.4; run.boosts++; play('power', 1.4, 0.8); buzz(25); float(car.x, car.y - 100, T('st_boost'), '#bff0c0'); ring(o.x, o.y, '#bff0c0', 30); } }
@@ -1142,7 +1189,10 @@ function update(dt) {
   for (const s of SITES) { const dx = s.x - car.x, dy = s.y - car.y, rr = reach(s); if (dx * dx + dy * dy >= rr * rr) continue; cur = s.id;
     if (!run.seen[s.id]) { run.seen[s.id] = 1; run.seenT[s.id] = run.t; if (!save.cards.includes(s.id)) { save.cards.push(s.id); save.coins += s.coins; run.cards.push(s.id); addXP(30); persist(); coinsUI(); play('zone'); note(T('found', T('s_' + s.id), s.coins), 'card', 3.2); } } }
   if (cur !== run.cur) { run.cur = cur; if (cur) { run.vis.push(cur); if (run.vis.length > 60) run.vis.shift(); } } // the order places were entered, for delivery missions
-  run.mt -= dt; if (run.mt <= 0) { run.mt = 0.25; checkMissions(); misHud(); }
+  run.mt -= dt; if (run.mt <= 0) { run.mt = 0.25; checkMissions(); misHud();
+    // which region the car is in. Crossing into another one is announced by name. A postcard, a finished mission or a new level is left to be read first; anything slighter gives way.
+    const rg = regAt(car.x, car.y); if (RW[rg] > 0.6 && rg !== run.reg) { run.reg = rg; if (!run.regs[rg]) { run.regs[rg] = 1; run.regN++; } if (!run.tut && !run.race && run.t > 2) run.regNote = rg; }
+    if (run.regNote >= 0 && (noteT <= 0 || $('note').className !== 'card')) { note(T('reg')[run.regNote], 'zone', 2.6); run.regNote = -1; } }
   if (run.tut) tutTick(dt);
   if (run.race) { // race: clock, ghost recording, next checkpoint. Fuel does not run down.
     run.rt += dt; run.recT -= dt; if (run.recT <= 0) { run.recT += 0.2; if (run.rec.length < 6000) run.rec.push(Math.round(car.x), Math.round(car.y), Math.round(car.ang * 100)); }
@@ -1329,6 +1379,8 @@ function drawMap(cnv, big) { // big: the whole reserve, for the map sheet. Other
   SITES.forEach((s, i) => { const on = save.cards.includes(s.id), home = !big && s.id === 'camp', r = (big ? 7 : 7.5) * u; if (!home && !seen(s.x, s.y)) return; const q = home ? rim(s.x, s.y) : [px(s.x), py(s.y), 0]; // the camp never leaves the round map
     g.fillStyle = on ? '#1f7a74' : '#d9b57f'; g.strokeStyle = q[2] ? '#fffaf0' : INK; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(q[0], q[1], q[2] ? r * 0.8 : r, 0, TAU); g.fill(); g.stroke();
     g.fillStyle = on ? '#fffaf0' : INK; g.fillText(big ? String(i + 1) : on ? '' : '?', q[0], q[1] + 0.5 * u); });
+  if (big) { const names = T('reg'); g.font = `800 ${Math.round(8 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; // the five regions by name, each in the middle of its slice
+    [[350, 5600], [65, 5000], [155, 5000], [230, 5000], [300, 5200]].forEach(([b, d], i) => { const a = b * Math.PI / 180, x = px(Math.sin(a) * d), y = py(-Math.cos(a) * d); g.lineWidth = 3 * u; g.strokeStyle = 'rgba(255,250,240,.8)'; g.strokeText(names[i + 1], x, y); g.fillStyle = INK; g.fillText(names[i + 1], x, y); }); }
   if (run.race && live && run.ri < run.race.pts.length) { // the race route still to drive
     g.strokeStyle = '#fffaf0'; g.lineWidth = 2.2 * u; g.setLineDash([5 * u, 4 * u]); g.beginPath(); g.moveTo(px(car.x), py(car.y)); for (let i = run.ri; i < run.race.pts.length; i++) { const q = site(run.race.pts[i]); g.lineTo(px(q.x), py(q.y)); } g.stroke(); g.setLineDash([]);
     const q = site(run.race.pts[run.ri]), w = big ? [px(q.x), py(q.y)] : rim(q.x, q.y); g.strokeStyle = SHEMAGH; g.lineWidth = 3 * u; g.beginPath(); g.arc(w[0], w[1], (9 + Math.sin(t * 6) * 2) * u, 0, TAU); g.stroke();
@@ -1382,7 +1434,7 @@ function showMenu() {
 function startRun(rc, lesson) { // rc: a race to drive, or nothing for a free safari. lesson: give the first lesson again, asked for from How to play
   unlockAudio(); st = 'play'; newDay(); resetCar(); resetWorld();
   const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl });
-  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0,
+  Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0, reg: 0, regs: { 0: 1 }, regN: 1, regNote: -1, rDist: 0, rAir: 0, rDrift: 0, rDates: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   run.tut = !rc && (lesson || !save.tut) ? { i: 0, ok: 0, d0: 0, r0: 0, f0: 0 } : null; tutKey = ''; show('tut', !!run.tut); if (run.tut) tutHud(0, 0);
   if (rc) { const a = site(rc.pts[0]), b = site(rc.pts[1]), an = Math.atan2(b.y - a.y, b.x - a.x), d = reach(a) + 40; car.x = a.x + Math.cos(an) * d; car.y = a.y + Math.sin(an) * d; car.ang = an; car.z = H(car.x, car.y); }
@@ -1539,7 +1591,7 @@ const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); tutKey = ''; coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, region, regAt, RW, REG, ANIMALS, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------

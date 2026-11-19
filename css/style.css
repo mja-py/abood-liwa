@@ -104,6 +104,7 @@ h2{font-size:36px}
 #note{position:fixed;left:50%;transform:translateX(-50%);top:calc(70px + env(safe-area-inset-top,0px));z-index:60;background:var(--ink);color:var(--cream);border-radius:12px;padding:6px 14px;font-weight:700;font-size:15px;
   max-width:calc(100% - 320px);min-width:min(220px,60%);text-align:center;pointer-events:none}
 #note.card{background:var(--teal);border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink);font-size:17px}
+#note.zone{background:var(--cream);color:var(--ink);border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink);font-size:20px;font-weight:800;padding:6px 22px}
 #note.baba{background:var(--cream);color:var(--ink);border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink)}
 
 /* ---------- menu with avatar, sheets ---------- */
