@@ -79,6 +79,7 @@ h2{font-size:36px}
 .flag-big svg{width:96px;height:60px;border-radius:6px;border:2px solid var(--ink);display:block}
 .btn:focus-visible,.corner:focus-visible,.ghost:focus-visible{outline:3px solid var(--teal);outline-offset:3px}
 .hint{font-size:13px!important;opacity:.75;text-align:center}
+.hint.goal{opacity:1;font-size:15px!important;font-weight:800;background:var(--teal);color:var(--cream);border:2px solid var(--ink);border-radius:12px;padding:6px 12px;margin:0 0 8px}
 .score{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .score div{background:var(--cream);border:2px solid var(--sand-d);border-radius:12px;padding:6px 8px;min-width:0}
 .score b{display:block;font-size:26px;font-variant-numeric:tabular-nums;line-height:1.1}

@@ -21,62 +21,69 @@ const APP = !!navigator.standalone || matchMedia('(display-mode: standalone), (d
 const SAVE_KEY = 'abood-liwa-v1';
 const save = { coins: 0, best: 0, cards: [], color: 'white', colors: ['white'], tank: 0, muted: false, runs: 0, xp: 0, lvl: 1, up: {}, missions: [], mrec: [], medals: {}, times: {}, day: '', streak: 0, truck: 'classic', trucks: ['classic'] };
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}')); } catch (e) {}
-save.up = Object.assign({ engine: 0, tyres: 0, balance: 0, tank: Math.min(5, save.tank || 0), magnet: 0 }, save.up);
+save.up = Object.assign({ engine: 0, tyres: 0, balance: 0, tank: Math.min(5, save.tank || 0), magnet: 0, turbo: 0 }, save.up); if (!save.wall) save.wall = 0; // wall: how many of the great ridges this player has crossed
 if (save.tut === undefined) save.tut = save.runs > 0 ? 1 : 0; // the first lesson is for a first visit: 0 until it has been finished or skipped. Anyone who has already driven does not need it.
 // What the player has uncovered. The big map starts under a haze and clears where the car has been: FOG is a grid of 56 x 56 squares
 // of 256 px, one mark each, set once the car has come within FOG_R of the middle of the square. It is kept in the save as text.
 // save.spot lists the places the car has come near (SPOT_R) without reaching: those show as a question mark on both maps. A place
 // neither found nor spotted is on no map at all, so it has to be looked for.
-const FOG_N = 56, FOG_C = 256, FOG_O = FOG_N * FOG_C / 2, FOG_R = 450, SPOT_R = 1200, FOG = new Uint8Array(FOG_N * FOG_N), fogFresh = !save.fog;
+if (save.map !== 4) { save.fog = ''; save.spot = []; } // the reserve has been laid out afresh (see map 4, below): what was uncovered of the old one no longer fits
+const FOG_N = 56, FOG_C = 384, FOG_O = FOG_N * FOG_C / 2, FOG_R = 620, SPOT_R = 1500, FOG = new Uint8Array(FOG_N * FOG_N), fogFresh = !save.fog;
 let fogDirty = false, fogIn = 0, fogAll = 0, FOG_TOT = 1; // marks not yet written to the save; squares uncovered inside the reserve, and anywhere; squares inside the reserve
 try { if (save.fog) { const b = atob(save.fog); for (let i = 0; i < FOG.length; i++) FOG[i] = b.charCodeAt(i >> 3) >> (i & 7) & 1; } } catch (e) {}
 if (!Array.isArray(save.spot)) save.spot = [];
 const fogText = () => { const by = new Uint8Array(FOG.length >> 3); for (let i = 0; i < FOG.length; i++) if (FOG[i]) by[i >> 3] |= 1 << (i & 7); return btoa(String.fromCharCode(...by)); };
 const persist = () => { try { if (fogDirty) { save.fog = fogText(); fogDirty = false; } localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
-// Map 2: the reserve doubled in width and every place moved further out. Postcards, medals, dirhams and levels are kept. Best race times
-// and their ghosts were driven on the old, shorter routes, so they start again, and so do today's race and any mission timed for the old distances.
-const grew = save.map !== 2 && save.runs > 0; // someone who drove the smaller reserve is told once (boot)
-if (save.map !== 2) { save.times = {}; for (const k of Object.keys(save.medals)) if (k.startsWith('daily:')) delete save.medals[k]; save.missions = save.missions.filter(m => m.t !== 'dash'); save.map = 2; persist(); try { localStorage.removeItem('abood-liwa-ghost'); } catch (e) {} }
+// Map 2: the reserve doubled in width. Map 3: two great ridges ringed the camp. Map 4: the reserve is half as wide again and laid out as a
+// journey north, the camp near its southern edge, two 'arqoubs the size of mountains across it, and every place moved. Postcards, medals,
+// dirhams, levels and upgrades are kept each time. Best race times and their ghosts were driven over other ground, so they start again;
+// missions are dealt afresh; and at map 4 the uncovered map and the places spotted start again too.
+const grew = save.map !== 4 && save.runs > 0; // someone who drove the reserve as it was is told once (boot)
+if (save.map !== 4) { save.times = {}; for (const k of Object.keys(save.medals)) if (k.startsWith('daily:')) delete save.medals[k]; save.missions = []; save.wall = 0; save.map = 4; persist(); try { for (const k of ['', '2', '3']) localStorage.removeItem('abood-liwa-ghost' + k); } catch (e) {} }
 const COLORS = { // white first: the classic desert car, and Abood's red shemagh stands out against it
   white: { main: '#fbf9f2', dark: '#8f887a', trim: SHEMAGH, cost: 0 }, teal: { main: '#1f7a74', dark: '#123f3c', trim: '#fffaf0', cost: 150 },
   yellow: { main: '#f2c230', dark: '#7a5a12', trim: '#2b1a12', cost: 300 }, red: { main: SHEMAGH, dark: '#6e1118', trim: '#fffaf0', cost: 500 },
   black: { main: '#2f2b28', dark: '#151312', trim: '#e0a72a', cost: 1000 },
 };
 
-// ---------- the world: a round reserve of dunes, 13.6 km of pixels across ----------
-const R = 6800, WX = 0.866, WY = 0.5; // WX,WY: the wind direction that shapes the dunes
-const SITES = [
-  { id: 'camp', x: 0, y: 0, r: 250 }, { id: 'moreeb', x: 3600, y: -3400, r: 120, hill: 200 }, { id: 'oasis', x: -4200, y: -1500, r: 300 },
-  { id: 'fort', x: 4800, y: 900, r: 240 }, { id: 'camels', x: -2100, y: 3000, r: 230 }, { id: 'oryx', x: 2600, y: 2400, r: 180 },
-  { id: 'falcon', x: -5000, y: 2200, r: 150 }, { id: 'well', x: 700, y: -1000, r: 170 }, { id: 'sabkha', x: -800, y: -4300, r: 700 },
-  { id: 'festival', x: -3700, y: 300, r: 230 }, { id: 'gate', x: 700, y: 3600, r: 170 },
-  // seven more, further out, each in the region it belongs to. They come last so the numbers of the first eleven on the map never change.
-  { id: 'roses', x: -1600, y: -5600, r: 170 }, { id: 'stands', x: 2900, y: -2500, r: 200 }, { id: 'tower', x: 5600, y: -2200, r: 150 }, { id: 'farcamp', x: 1500, y: 5600, r: 230 },
-  { id: 'track', x: -3100, y: 4700, r: 300 }, { id: 'farm', x: -5500, y: -1700, r: 280 }, { id: 'village', x: -2900, y: -2300, r: 260 },
+// ---------- the world ----------
+// The reserve is a great round of sand 21 km of pixels across. The camp is not in the middle of it but near its southern edge, because
+// the game is a journey north: three areas lie one beyond the other, and between them stand two mountain dunes, each an 'arqoub that
+// runs right across the reserve from rim to rim. Tal Moreeb, the tallest of all, stands at the far northern end.
+const R = 10500, CX = 0, CY = -8200, WX = 0.866, WY = 0.5; // R, CX, CY: the reserve's radius and its middle, measured from the camp at 0,0. WX, WY: the wind direction that shapes the dunes
+const rimD = (x, y) => Math.hypot(x - CX, y - CY); // how far a point is from the middle of the reserve
+const SITES = [ // the order is the order of the numbers on the map. Home: the camp and the well. Second area: nine places. Third: six, and the top of Tal Moreeb.
+  { id: 'camp', x: 0, y: 0, r: 250 }, { id: 'moreeb', x: 2000, y: -16400, r: 120, hill: 1500 }, { id: 'oasis', x: -6800, y: -6000, r: 300 },
+  { id: 'fort', x: 5500, y: -13700, r: 240 }, { id: 'camels', x: -800, y: -5700, r: 230 }, { id: 'oryx', x: -7000, y: -13900, r: 180 },
+  { id: 'falcon', x: 1200, y: -7900, r: 150 }, { id: 'well', x: 700, y: -1000, r: 170 }, { id: 'sabkha', x: 6200, y: -6000, r: 380 },
+  { id: 'festival', x: -4600, y: -5500, r: 230 }, { id: 'gate', x: -3400, y: -13600, r: 170 },
+  { id: 'roses', x: 8000, y: -7800, r: 170 }, { id: 'stands', x: 1600, y: -13500, r: 200 }, { id: 'tower', x: 5400, y: -15900, r: 150 }, { id: 'farcamp', x: -4800, y: -14700, r: 230 },
+  { id: 'track', x: -1800, y: -8200, r: 300 }, { id: 'farm', x: -8300, y: -7600, r: 280 }, { id: 'village', x: -5200, y: -8000, r: 260 },
 ];
-const REST = { camp: 1, well: 1, farcamp: 1 }; // where a tank is topped up, once a run each: the two camps and the old well
-for (const s of SITES) { s.f2 = s.r * s.r; s.coins = Math.round(10 + Math.hypot(s.x, s.y) / 100); } // the further out a place is, the more its postcard pays
+const REST = { camp: 1, well: 1, village: 1, farcamp: 1 }; // where a tank is topped up, once a run each: a stop in every area, and the old well
+for (const s of SITES) { s.f2 = s.r * s.r; s.coins = s.hill ? 300 : Math.round(10 + Math.hypot(s.x, s.y) / 220); } // the further from the camp a place is, the more its postcard pays; the top of Tal Moreeb is the last and pays most
 const site = id => SITES.find(s => s.id === id);
-const fogAt = (x, y) => { const i = Math.floor((x + FOG_O) / FOG_C), j = Math.floor((y + FOG_O) / FOG_C); return i >= 0 && i < FOG_N && j >= 0 && j < FOG_N && FOG[j * FOG_N + i] === 1; }; // has this point been uncovered
+const fogAt = (x, y) => { const i = Math.floor((x - CX + FOG_O) / FOG_C), j = Math.floor((y - CY + FOG_O) / FOG_C); return i >= 0 && i < FOG_N && j >= 0 && j < FOG_N && FOG[j * FOG_N + i] === 1; }; // has this point been uncovered
 function uncover(x, y, r = FOG_R) { // clear the haze round a point. Returns how many squares inside the reserve were new.
-  let n = 0; const i0 = Math.max(0, Math.floor((x - r + FOG_O) / FOG_C)), i1 = Math.min(FOG_N - 1, Math.floor((x + r + FOG_O) / FOG_C)), j0 = Math.max(0, Math.floor((y - r + FOG_O) / FOG_C)), j1 = Math.min(FOG_N - 1, Math.floor((y + r + FOG_O) / FOG_C));
-  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const p = j * FOG_N + i, cx = (i + 0.5) * FOG_C - FOG_O, cy = (j + 0.5) * FOG_C - FOG_O; if (FOG[p] || (cx - x) * (cx - x) + (cy - y) * (cy - y) > r * r) continue; FOG[p] = 1; fogDirty = true; fogAll++; if (cx * cx + cy * cy < R * R) { fogIn++; n++; } }
+  let n = 0; const i0 = Math.max(0, Math.floor((x - CX - r + FOG_O) / FOG_C)), i1 = Math.min(FOG_N - 1, Math.floor((x - CX + r + FOG_O) / FOG_C)), j0 = Math.max(0, Math.floor((y - CY - r + FOG_O) / FOG_C)), j1 = Math.min(FOG_N - 1, Math.floor((y - CY + r + FOG_O) / FOG_C));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const p = j * FOG_N + i, cx = (i + 0.5) * FOG_C - FOG_O, cy = (j + 0.5) * FOG_C - FOG_O; if (FOG[p] || (cx + CX - x) * (cx + CX - x) + (cy + CY - y) * (cy + CY - y) > r * r) continue; FOG[p] = 1; fogDirty = true; fogAll++; if (cx * cx + cy * cy < R * R) { fogIn++; n++; } }
   return n;
 }
 for (let p = 0; p < FOG.length; p++) { const cx = (p % FOG_N + 0.5) * FOG_C - FOG_O, cy = ((p / FOG_N | 0) + 0.5) * FOG_C - FOG_O, inside = cx * cx + cy * cy < R * R; if (inside) FOG_TOT++; if (FOG[p]) { fogAll++; if (inside) fogIn++; } } FOG_TOT--;
-if (fogFresh) { uncover(0, 0, 900); for (const id of save.cards) { const q = site(id); if (q) uncover(q.x, q.y); } } // a first visit: the camp is known, and so is the ground round every place already found
+if (fogFresh) { uncover(0, 0, 1000); for (const id of save.cards) { const q = site(id); if (q) uncover(q.x, q.y); } } // a first visit: the camp is known, and so is the ground round every place already found
 const fogPct = () => Math.floor(fogIn / FOG_TOT * 100);
-// sixteen more big dunes without a name, so there is high ground to climb and fly off in every part of the reserve. The first four are
-// the ones round the camp; the rest stand further out. None is as tall as Tal Moreeb.
-const HILLS = [{ x: 2600, y: -900, h: 150 }, { x: -900, y: -1300, h: 120 }, { x: -1500, y: 1900, h: 140 }, { x: 1600, y: 1700, h: 130 },
-  { x: 800, y: -2700, h: 130 }, { x: 1500, y: -5200, h: 150 }, { x: 5200, y: -800, h: 150 }, { x: 4300, y: 3200, h: 140 }, { x: 2200, y: 4600, h: 150 }, { x: -900, y: 5200, h: 160 },
-  { x: -4000, y: 4000, h: 140 }, { x: -2600, y: -200, h: 120 }, { x: -3200, y: -3600, h: 150 }, { x: -5900, y: 300, h: 130 }, { x: 3000, y: 700, h: 110 }, { x: -300, y: 2100, h: 120 }];
+// sixteen big dunes without a name, so there is high ground to climb and fly off in every area: four at home, eight in the second area,
+// four in the third. They are hills beside the 'arqoubs, which are mountains.
+const HILLS = [{ x: -900, y: -1200, h: 120 }, { x: -2600, y: 300, h: 130 }, { x: 2600, y: 200, h: 140 }, { x: 1500, y: 1000, h: 120 },
+  { x: -2900, y: -6600, h: 150 }, { x: 3400, y: -5600, h: 150 }, { x: 2900, y: -8500, h: 150 }, { x: -8000, y: -5200, h: 140 }, { x: 8600, y: -5400, h: 140 }, { x: -300, y: -7000, h: 160 }, { x: 4800, y: -8300, h: 150 }, { x: -6900, y: -8900, h: 140 },
+  { x: -1000, y: -14300, h: 160 }, { x: -5200, y: -15900, h: 150 }, { x: -2400, y: -16800, h: 170 }, { x: 7600, y: -13400, h: 150 }];
 // H() below is asked for every pixel of every ground tile, so it must not walk the whole list of dunes and places each time. They are
 // sorted once into squares of 1024 px, and H() looks only at the few that can reach the square it is in. The order is kept: big dunes
 // first, then the places, because level ground round a landmark is laid over whatever is already there.
-const GC = 1024, GH = Math.ceil((R + 1400) / GC), GN = GH * 2, BUMPS = Array.from({ length: GN * GN }, () => []);
-for (const q of [...HILLS.map(q => ({ x: q.x, y: q.y, h: q.h, c2: 1.176e6, k: 0 })), ...SITES.map(s => s.hill ? { x: s.x, y: s.y, h: s.hill, c2: 1.6e6, k: 1 } : { x: s.x, y: s.y, f2: s.f2, c2: s.f2 * 6, k: 2 })]) {
-  const rr = Math.sqrt(q.c2); for (let j = Math.floor((q.y - rr) / GC) + GH; j <= Math.floor((q.y + rr) / GC) + GH; j++) for (let i = Math.floor((q.x - rr) / GC) + GH; i <= Math.floor((q.x + rr) / GC) + GH; i++) if (i >= 0 && i < GN && j >= 0 && j < GN) BUMPS[j * GN + i].push(q);
+const MRB_S2 = 1150 * 1150, MRB_C2 = 2990 * 2990; // Tal Moreeb is a bell of sand: this wide (squared), and cut off this far out (squared)
+const GC = 1024, GH = Math.ceil((R + 2500) / GC), GN = GH * 2, BUMPS = Array.from({ length: GN * GN }, () => []);
+for (const q of [...HILLS.map(q => ({ x: q.x, y: q.y, h: q.h, c2: 1.176e6, k: 0 })), ...SITES.map(s => s.hill ? { x: s.x, y: s.y, h: s.hill, s2: MRB_S2, c2: MRB_C2, e: Math.exp(-MRB_C2 / MRB_S2), k: 1 } : { x: s.x, y: s.y, f2: s.f2, c2: s.f2 * 6, k: 2 })]) {
+  const rr = Math.sqrt(q.c2); for (let j = Math.floor((q.y - CY - rr) / GC) + GH; j <= Math.floor((q.y - CY + rr) / GC) + GH; j++) for (let i = Math.floor((q.x - CX - rr) / GC) + GH; i <= Math.floor((q.x - CX + rr) / GC) + GH; i++) if (i >= 0 && i < GN && j >= 0 && j < GN) BUMPS[j * GN + i].push(q);
 }
 
 function hash2(ix, iy) { let n = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ 0x5bd1e995; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; }
@@ -91,49 +98,87 @@ function ridge(u, a) { const s = u - Math.floor(u); return s < a ? 0.5 - 0.5 * M
 // one real dune in cross-section, u running downwind: a long windward ramp that is still climbing when it reaches the crest, so the
 // crest is a lip to fly off, then the slip face, steepest at the top and easing out into the trough. a is the windward share.
 function dune(u, a) { const s = u - Math.floor(u); if (s < a) { const t = s / a; return t * t * (2 - t); } return Math.pow(1 - (s - a) / (1 - a), 1.45); }
+// ---------- the mountain dunes ----------
+// Two 'arqoubs, dunes the size of mountains, lie across the whole reserve from west to east and part its three areas. Each is climbed
+// from the south up a face one and a half to two thousand pixels long, and falls away more steeply on the far side. Its crest line
+// wanders, and it stands higher in some places than others, so it reads as a range of sand and not a wall. A car needs upgrades to
+// climb each one (the gates, below). RNG: where each crest runs (y), how long its southern and northern faces are, and how high it stands.
+// ridgeT() says where a point stands on each: WT[k] runs from -1 at the southern foot, through 0 on the crest, to 1 at the northern
+// foot, and is 9 well away from it. WH[k] is the height that 'arqoub adds at the point.
+const RNG = [{ y: -3300, fs: 1700, fn: 1200, h: 650 }, { y: -11400, fs: 2000, fn: 1400, h: 950 }], WT = new Float32Array(2), WH = new Float32Array(2);
+function ridgeT(x, y) {
+  for (let k = 0; k < 2; k++) { const q = RNG[k]; WT[k] = 9; WH[k] = 0; if (y > q.y + q.fs + 320 || y < q.y - q.fn - 320) continue;
+    const s = q.y + (vn(x * 0.0006 + k * 5.3, 1.7) - 0.5) * 560 - y, t = s < 0 ? s / q.fs : s / q.fn; WT[k] = t; // s: how far north of the crest line
+    if (t > -1 && t < 1) { const c = Math.cos(t * 1.5707963); WH[k] = c * c * q.h * (0.82 + 0.36 * vn(x * 0.00045 + k * 7.7, 3.1)); } }
+}
+// which area a point is in: 0 home, 1 the second, 2 the third. The crest of an 'arqoub is where one area ends and the next begins.
+function zoneAt(x, y) { ridgeT(x, y); return (WT[1] === 9 ? y < RNG[1].y : WT[1] >= 0) ? 2 : (WT[0] === 9 ? y < RNG[0].y : WT[0] >= 0) ? 1 : 0; }
 // ---------- regions ----------
-// The reserve is six kinds of ground: the home sands round the camp, and five regions round them like slices of a pie. Each has its own
-// dune height, sand colour, feel under the wheels and share of what is scattered. region() says how much of each a point is: six weights
-// that add up to 1. They blend over a few hundred pixels at a border, and a slow noise bends the borders so none is a straight line.
-// Slices by bearing, clockwise from north: salt plain 320-20, Moreeb dunes 20-110, Empty Quarter 110-200, gravel plain 200-260, oasis belt 260-320.
+// Six kinds of ground. The home sands are the first area. The second area is the oasis belt in the west, the gravel plain in the middle
+// and the salt plain in the east. The third is the Empty Quarter in the west and the Moreeb dunes in the east. Each has its own dune
+// height, sand colour, feel under the wheels and share of what is scattered. region() says how much of each a point is: six weights
+// that add up to 1. They blend over several hundred pixels at a border, and a slow noise bends the borders so none is a straight line.
 const REG = ['home', 'salt', 'moreeb', 'empty', 'gravel', 'oasis'], RW = new Float32Array(6); // RW: the answer to the last region() call
-const R_IN = 1500, R_OUT = 2400, R_BW = 7; // the home sands end between these two distances from the camp; half the width of a border between two slices, in degrees
 function region(x, y) {
-  const d2 = x * x + y * y; RW[0] = 1; RW[1] = RW[2] = RW[3] = RW[4] = RW[5] = 0; if (d2 < 1.5625e6) return RW; // within 1250 of the camp it is all home sands, whatever the noise says
-  const n = vn(x * 0.0009 + 3.3, y * 0.0009 - 8.1) - 0.5, o = sstep(R_IN, R_OUT, Math.sqrt(d2) + n * 500); if (o <= 0) return RW;
-  let b = (Math.atan2(x, -y) * 57.29578 + 400 + n * 16) % 360; // the bearing, turned so that the salt plain starts at 0
-  const s1 = sstep(60 - R_BW, 60 + R_BW, b), s2 = sstep(150 - R_BW, 150 + R_BW, b), s3 = sstep(240 - R_BW, 240 + R_BW, b), s4 = sstep(300 - R_BW, 300 + R_BW, b), f0 = sstep(-R_BW, R_BW, b), f1 = sstep(360 - R_BW, 360 + R_BW, b);
-  RW[0] = 1 - o; RW[1] = o * (f0 * (1 - s1) + f1); RW[2] = o * s1 * (1 - s2); RW[3] = o * s2 * (1 - s3); RW[4] = o * s3 * (1 - s4); RW[5] = o * (s4 * (1 - f1) + 1 - f0);
+  RW[0] = 1; RW[1] = RW[2] = RW[3] = RW[4] = RW[5] = 0; if (y > RNG[0].y + 900) return RW; // well south of the first crest it is all home sands, whatever the noise says
+  const n = vn(x * 0.0009 + 3.3, y * 0.0009 - 8.1) - 0.5, yy = y + n * 400, xx = x + n * 900;
+  const a1 = sstep(RNG[0].y + 500, RNG[0].y - 500, yy), a2 = sstep(RNG[1].y + 600, RNG[1].y - 600, yy), w2 = a1 * (1 - a2); // a1, a2: 0 south of each crest, 1 north of it
+  const o = 1 - sstep(-3600, -2400, xx), sl = sstep(2600, 3800, xx), m = sstep(-900, 900, xx);
+  RW[0] = 1 - a1; RW[5] = w2 * o; RW[1] = w2 * sl; RW[4] = w2 * (1 - o - sl); RW[2] = a2 * m; RW[3] = a2 * (1 - m);
   return RW;
 }
 const regAt = (x, y) => { region(x, y); let b = 0; for (let i = 1; i < 6; i++) if (RW[i] > RW[b]) b = i; return b; }; // which region a point mostly is
+const MRB = site('moreeb');
+// ---------- the gates ----------
+// What it takes to get over each 'arqoub, and at the last onto the top of Tal Moreeb: an engine level, and for the later ones a turbo.
+// A car without it bogs down part of the way up the face and slides back. This is the game's long goal: earn, upgrade, break out north.
+const GATES = [null, { engine: 3, turbo: 0 }, { engine: 5, turbo: 1 }, { engine: 5, turbo: 2 }];
+const gateOK = k => !k || (save.up.engine >= GATES[k].engine && save.up.turbo >= GATES[k].turbo), gateMax = () => gateOK(3) ? 3 : gateOK(2) ? 2 : gateOK(1) ? 1 : 0, nextGate = () => gateMax() + 1; // nextGate is 4 once everything is open
+const canReach = q => q.zone <= gateMax(), inReach = (x, y) => zoneAt(x, y) <= Math.min(2, gateMax());
+// The face under a point, if it is one this car cannot climb yet. LK.k: which gate; LK.b: how hard the sand holds, 0 a fifth of the way
+// up the face to 1 near half way; LK.hard: this close to the crest nothing gets through; LK.nx, LK.ny: the way that leads over.
+const LK = { k: 0, b: 0, hard: false, nx: 0, ny: 0 };
+function lockAt(x, y) {
+  LK.k = 0; LK.b = 0; LK.hard = false; if (gateOK(3)) return LK;
+  const dx = MRB.x - x, dy = MRB.y - y, dm = Math.hypot(dx, dy) || 1; if (dm < 2150) { LK.k = 3; LK.b = sstep(2150, 1450, dm); LK.hard = dm < 1000; LK.nx = dx / dm; LK.ny = dy / dm; return LK; } // Tal Moreeb's cone
+  ridgeT(x, y); const k = !gateOK(1) && WT[0] !== 9 && WT[0] > -0.8 ? 1 : !gateOK(2) && WT[1] !== 9 && WT[1] > -0.8 ? 2 : 0;
+  if (k) { const t = WT[k - 1]; LK.k = k; LK.b = sstep(-0.8, -0.55, t); LK.hard = t > -0.2;
+    // The way over is straight across the 'arqoub, and its crest line wanders, so the direction is measured from the 'arqoub itself:
+    // a car driving along the face must not be able to slip across where the line bends.
+    ridgeT(x + 12, y); const gx = WT[k - 1] - t; ridgeT(x, y + 12); const gy = WT[k - 1] - t, g = Math.hypot(gx, gy) || 1; LK.nx = gx / g; LK.ny = gy / g; }
+  return LK;
+}
+for (const s of SITES) s.zone = s.hill ? 3 : zoneAt(s.x, s.y); // which area a place is in; the top of Tal Moreeb is a step of its own, the last
 function H(x, y) { // leaves the point's region weights in RW
-  region(x, y);
+  region(x, y); ridgeT(x, y);
+  // On an 'arqoub and on Tal Moreeb's cone the ordinary dunes shrink to ripples, so each reads as one enormous slope.
+  const w1 = WH[0], w2 = WH[1], mx = x - MRB.x, my = y - MRB.y, m2 = mx * mx + my * my; let big = Math.min(1, Math.max(w1 / RNG[0].h, w2 / RNG[1].h)); if (m2 < MRB_C2) big = Math.max(big, Math.min(1.45, 2.3 * Math.exp(-m2 / MRB_S2)));
   const w = vn(x * 0.0011 + 7.3, y * 0.0011 - 2.1) - 0.5, u = (x * WX + y * WY) / 560 + w * 0.7;
   const a0 = 0.45 + 0.55 * sstep(0.28, 0.66, vn(x * 0.0006 - 4.2, y * 0.0006 + 9.7)); // low dunes in some parts of the reserve, tall ones in others
   // The regions change how tall the dunes stand, never how far apart they are or which way they run: a crest line crosses a border unbroken.
   // Salt plain: almost flat. Moreeb dunes: always tall, a third taller than anywhere else. Empty Quarter: ordinary dunes riding on great
   // ridges three dunes apart. Gravel plain: low and lumpy. Oasis belt: half height.
-  const amp = a0 * (RW[0] + RW[1] * 0.1 + RW[3] * 0.8 + RW[4] * 0.3 + RW[5] * 0.55) + RW[2] * (0.62 + 0.38 * a0) * 1.32;
+  const amp = (a0 * (RW[0] + RW[1] * 0.1 + RW[3] * 0.8 + RW[4] * 0.3 + RW[5] * 0.55) + RW[2] * (0.62 + 0.38 * a0) * 1.32) * (1 - 0.65 * big);
   let h = dune(u, 0.68) * 95 * amp // the bend in the crest lines is kept gentle enough that every slip face looks downwind
     + ridge((x * 0.5 - y * 0.866) / 250 + w * 0.9 + 3.1, 0.66) * 12 * (0.4 + amp * 0.6) * (1 - 0.8 * RW[1])
     + vn(x * 0.0024 + 1.7, y * 0.0024 + 5.1) * 12 * (1 - 0.6 * RW[1] + 0.5 * RW[4]);
-  if (RW[3] > 0) h += dune(u / 3 + 0.37, 0.72) * 105 * RW[3];
-  const gi = Math.floor(x / GC) + GH, gj = Math.floor(y / GC) + GH;
+  if (RW[3] > 0) h += dune(u / 3 + 0.37, 0.72) * 105 * RW[3] * (1 - 0.65 * big);
+  h += w1 + w2;
+  const gi = Math.floor((x - CX) / GC) + GH, gj = Math.floor((y - CY) / GC) + GH;
   if (gi >= 0 && gi < GN && gj >= 0 && gj < GN) { const near = BUMPS[gj * GN + gi];
     for (let n = 0; n < near.length; n++) { const q = near[n], dx = x - q.x, dy = y - q.y, d2 = dx * dx + dy * dy; if (d2 >= q.c2) continue;
-      // Each bump is lowered by its own value at the edge where it is cut off (e^-7.346 and e^-6), so it meets the dunes with no step.
+      // Each bump is lowered by its own value at the edge where it is cut off, so it meets the dunes with no step.
       // A step there was only a fraction of a pixel high, but the crest shading picks it up and draws it as a dashed ring on the sand.
       if (q.k === 0) h += q.h * (Math.exp(-d2 / 160000) - 6.4e-4);                              // a big dune without a name
-      else if (q.k === 1) h += q.h * (Math.exp(-d2 / 217800) - 6.45e-4);                        // Tal Moreeb: one big dune
+      else if (q.k === 1) h += q.h * (Math.exp(-d2 / q.s2) - q.e);                              // Tal Moreeb: a mountain of sand
       else { const f = Math.exp(-d2 / q.f2) - 2.48e-3; h = h * (1 - f) + 5 * f; } } }           // level ground around a landmark
-  const d = Math.hypot(x, y); if (d > R - 150) { const e = (d - (R - 150)) / 150; h += e * e * 45; } // the rim rises
+  const d = rimD(x, y); if (d > R - 150) { const e = (d - (R - 150)) / 150; h += e * e * 45; } // the rim rises
   return h;
 }
 
 // ---------- ground tiles: height-shaded sand, baked once and cached ----------
 const TS = 256, TP = 128, TILE_MAX = 150, LX = -0.5, LY = -0.62, LZ = 0.6;
-const tiles = new Map(), HG = new Float32Array((TP + 2) * (TP + 2)), RG = new Float32Array((TP + 2) * (TP + 2) * 6); // heights and region weights of the tile being baked
+const tiles = new Map(), HG = new Float32Array((TP + 2) * (TP + 2)), RG = new Float32Array((TP + 2) * (TP + 2) * 6), MG = new Float32Array((TP + 2) * (TP + 2)); // heights, region weights and 'arqoub heights of the tile being baked
 let bakeBudget = 0;
 // Each region's sand in shadow, in between, and in the light, in the order of REG: the home sands as they have always been, the salt
 // plain pale, the Moreeb dunes red, the Empty Quarter gold, the gravel plain grey-brown, the oasis belt a greener tan.
@@ -147,21 +192,25 @@ function sand(k, out, o, w, q) { // k 0..1 = shadow..lit; w[q..q+5]: the region 
 }
 function shadeAt(dx, dy, c, wx, wy, curv = 0) { // curv: how sharply the ground bends here; a crest catches the light, a trough sits a little darker
   const sh = (-dx * LX - dy * LY + LZ) / Math.sqrt(dx * dx + dy * dy + 1);
-  let k = (sh - LZ) * 1.25 + 0.5 + (c - 30) * 0.0013 + Math.sin((wx * WX + wy * WY) * 0.42 + vn(wx * 0.01, wy * 0.01) * 5) * 0.02 + clamp(-curv * 0.13, -0.07, 0.24);
+  let k = (sh - LZ) * 1.25 + 0.5 + (Math.min(c, 240) - 30) * 0.0013 + Math.sin((wx * WX + wy * WY) * 0.42 + vn(wx * 0.01, wy * 0.01) * 5) * 0.02 + clamp(-curv * 0.13, -0.07, 0.24);
   k = clamp(k, 0, 1); return k * 0.55 + Math.round(k * 6) / 6 * 0.45; // half smooth, half banded: a drawn look
 }
 const SAB = site('sabkha');
 function bakeTile(ix, iy) {
   const cv = mk(TP, TP), g = cv.getContext('2d'), img = g.createImageData(TP, TP), px = img.data, N = TP + 2, st = TS / TP;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const p = j * N + i; HG[p] = H(ix * TS + (i - 0.5) * st, iy * TS + (j - 0.5) * st); RG.set(RW, p * 6); }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const p = j * N + i; HG[p] = H(ix * TS + (i - 0.5) * st, iy * TS + (j - 0.5) * st); RG.set(RW, p * 6); MG[p] = WH[0] + WH[1]; }
   for (let j = 0; j < TP; j++) for (let i = 0; i < TP; i++) {
     const p = (j + 1) * N + i + 1, o = (j * TP + i) * 4, wx = ix * TS + (i + 0.5) * st, wy = iy * TS + (j + 0.5) * st;
     const k = shadeAt((HG[p + 1] - HG[p - 1]) / (2 * st), (HG[p + N] - HG[p - N]) / (2 * st), HG[p], wx, wy, HG[p + 1] + HG[p - 1] + HG[p + N] + HG[p - N] - 4 * HG[p]);
     sand(k, px, o, RG, p * 6);
+    // What makes a mountain of sand read as one from above. Contour lines: a darker line every 120 of height, on anything that stands
+    // over 170. Tyre tracks: on the face of an 'arqoub, thin lines running straight up it, the marks of everyone who has climbed before.
+    if (HG[p] > 170) { const sx = (HG[p + 1] - HG[p - 1]) / (2 * st), sy = (HG[p + N] - HG[p - N]) / (2 * st), sl = Math.sqrt(sx * sx + sy * sy), f = HG[p] / 120; if (sl > 0.1 && f - Math.floor(f) < 0.045 / Math.max(0.4, sl)) { px[o] *= 0.87; px[o + 1] *= 0.87; px[o + 2] *= 0.87; } }
+    if (MG[p] > 70) { const tu = Math.floor((wx + vn(wx * 0.004, wy * 0.0015) * 70) / 7), th = hash2(tu, 77); if (th > 0.72 && vn(tu * 0.37, wy * 0.0035) > 0.4) { const f = 1 - (0.05 + 0.3 * (th - 0.72)) * Math.min(1, MG[p] / 220); px[o] *= f; px[o + 1] *= f; px[o + 2] *= f; } }
     const wg = RG[p * 6 + 4]; if (wg > 0.05) { const n = hash2(ix * TP + i, iy * TP + j); if (n > 0.9) { const f = 1 - (n > 0.975 ? -0.1 : 0.17) * wg; px[o] *= f; px[o + 1] *= f; px[o + 2] *= f; } } // gravel: a scatter of dark stones and a few pale ones
     const ds = Math.hypot(wx - SAB.x, wy - SAB.y);
     if (ds < SAB.r) { const f = sstep(SAB.r, SAB.r * 0.72, ds) * 0.85, v = 0.9 + 0.1 * k; px[o] += (236 * v - px[o]) * f; px[o + 1] += (226 * v - px[o + 1]) * f; px[o + 2] += (206 * v - px[o + 2]) * f; }
-    const d = Math.hypot(wx, wy);
+    const d = rimD(wx, wy);
     if (d > R) { const f = sstep(R, R + 140, d) * 0.6; px[o] += (120 - px[o]) * f; px[o + 1] += (84 - px[o + 1]) * f; px[o + 2] += (66 - px[o + 2]) * f; }
     px[o + 3] = 255;
   }
@@ -175,13 +224,14 @@ function tile(ix, iy) {
   return c;
 }
 // the whole reserve in one picture. The big map shows all of it; the round map in the corner shows the part around the car (drawMap).
-const MS = 528, miniBase = mk(MS, MS);
+const MS = 792, miniBase = mk(MS, MS);
 async function bakeMini(progress) {
   const g = miniBase.getContext('2d'), img = g.createImageData(MS, MS), px = img.data, k = 2 * R * 1.04 / MS, hg = new Float32Array(MS * MS);
-  for (let j = 0; j < MS; j++) { for (let i = 0; i < MS; i++) hg[j * MS + i] = H((i + 0.5 - MS / 2) * k, (j + 0.5 - MS / 2) * k); if (j % 44 === 43) { progress(j / MS); await nextFrame(); } }
+  for (let j = 0; j < MS; j++) { for (let i = 0; i < MS; i++) hg[j * MS + i] = H(CX + (i + 0.5 - MS / 2) * k, CY + (j + 0.5 - MS / 2) * k); if (j % 40 === 39) { progress(j / MS); await nextFrame(); } }
   for (let j = 1; j < MS - 1; j++) for (let i = 1; i < MS - 1; i++) {
-    const wx = (i + 0.5 - MS / 2) * k, wy = (j + 0.5 - MS / 2) * k, d = Math.hypot(wx, wy), o = (j * MS + i) * 4, p = j * MS + i; if (d > R * 1.03) continue;
+    const wx = CX + (i + 0.5 - MS / 2) * k, wy = CY + (j + 0.5 - MS / 2) * k, d = rimD(wx, wy), o = (j * MS + i) * 4, p = j * MS + i; if (d > R * 1.03) continue;
     sand(shadeAt((hg[p + 1] - hg[p - 1]) / (2 * k) * 1.6, (hg[p + MS] - hg[p - MS]) / (2 * k) * 1.6, hg[p], wx, wy), px, o, region(wx, wy), 0); px[o + 3] = 255;
+    if (hg[p] > 170) { const f = hg[p] / 240; if (f - Math.floor(f) < 0.14) { px[o] *= 0.86; px[o + 1] *= 0.86; px[o + 2] *= 0.86; } } // contour lines on the mountains
     if (Math.hypot(wx - SAB.x, wy - SAB.y) < SAB.r * 0.8) { px[o] = 236; px[o + 1] = 226; px[o + 2] = 206; }
     if (d > R) { px[o] = 120; px[o + 1] = 84; px[o + 2] = 66; }
   }
@@ -748,11 +798,12 @@ function blit(c, e, x, y, flip) {
 // ---------- things placed on the map ----------
 const dayKey = (d = new Date()) => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
 function rng(seed) { return () => { seed = seed + 0x6D2B79F5 | 0; let v = Math.imul(seed ^ seed >>> 15, 1 | seed); v = v + Math.imul(v ^ v >>> 7, 61 | v) ^ v; return ((v ^ v >>> 14) >>> 0) / 4294967296; }; }
-const PROPS = [], DATES = [], CANS = [], ANIMALS = [], RAMPS = [], HOOPS = [], PADS = [], GOLD = [];
+const PROPS = [], DATES = [], CANS = [], ANIMALS = [], RAMPS = [], HOOPS = [], PADS = [], GOLD = [], CLIMB = []; // CLIMB: other cars out on the 'arqoubs
 let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden dates were last dealt for, and the function that deals them
 (function place() {
   const P = (kind, x, y, flip) => PROPS.push({ kind, x, y, flip: !!flip, rad: KIND[kind][2] });
-  let q = site('camp'); P('tent', q.x, q.y - 70); P('fire', q.x - 105, q.y + 34); P('baba', q.x - 60, q.y - 4); P('palm', q.x + 138, q.y - 58); P('flag', q.x + 92, q.y - 96);
+  // The camp stands to the south-west of where the car sets off, behind it: the whole journey lies to the north, and nothing may block the way out.
+  let q = site('camp'); P('tent', q.x - 120, q.y + 150); P('fire', q.x - 226, q.y + 60); P('baba', q.x - 40, q.y + 196); P('palm', q.x - 236, q.y + 150); P('flag', q.x - 150, q.y + 60);
   q = site('moreeb'); P('summit', q.x, q.y);
   q = site('oasis'); for (let k = 0; k < 9; k++) { const a = k / 9 * TAU + 0.3; P('palm', q.x + Math.cos(a) * (150 + (k % 3) * 22), q.y + 20 + Math.sin(a) * (92 + (k % 2) * 18), k % 2); }
   q = site('fort'); P('fort', q.x, q.y - 20); P('palm', q.x - 150, q.y + 34); P('palm', q.x + 152, q.y + 12, 1);
@@ -762,45 +813,46 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
   q = site('festival'); P('stall', q.x, q.y - 30); P('palm', q.x - 122, q.y - 8); P('palm', q.x + 126, q.y, 1); P('basket', q.x + 44, q.y + 44); P('basket', q.x - 34, q.y + 54);
   q = site('gate'); P('gate', q.x, q.y); PROPS.push({ kind: 'post', x: q.x - 70, y: q.y, rad: 7, hide: 1 }, { kind: 'post', x: q.x + 70, y: q.y, rad: 7, hide: 1 });
   const arch = (x, y) => { P('arch', x, y); PROPS.push({ kind: 'post', x: x - 66, y, rad: 7, hide: 1 }, { kind: 'post', x: x + 66, y, rad: 7, hide: 1 }); }; // only its two posts are solid
-  q = site('camp'); P('drum', q.x - 232, q.y + 40); q = site('well'); P('drum', q.x - 76, q.y + 14); // fuel drums mark the three places that fill the tank
+  q = site('camp'); P('drum', q.x - 236, q.y - 20); q = site('well'); P('drum', q.x - 76, q.y + 14); // fuel drums mark the three places that fill the tank
   q = site('roses'); P('rose', q.x, q.y); for (let k = 0; k < 7; k++) { const a = k / 7 * TAU + 0.4, d = 52 + (k % 3) * 34; P('rose', q.x + Math.cos(a) * d, q.y + Math.sin(a) * d * 0.75, k % 2); }
   q = site('stands'); P('stands', q.x - 20, q.y - 50); P('flag', q.x - 128, q.y - 40); arch(q.x + 96, q.y + 70);
   q = site('tower'); P('tower', q.x, q.y - 10); P('palm', q.x - 78, q.y + 18, 1);
-  q = site('farcamp'); P('tent', q.x, q.y + 70); P('fire', q.x + 104, q.y - 30); P('drum', q.x - 118, q.y - 16); P('flag', q.x - 100, q.y + 44); P('palm', q.x + 146, q.y + 66, 1); // the tent stands on the far side: nearly everyone arrives from the north
+  q = site('farcamp'); P('tent', q.x, q.y - 62); P('fire', q.x + 100, q.y + 30); P('drum', q.x - 118, q.y + 14); P('flag', q.x - 96, q.y - 92); P('palm', q.x + 144, q.y - 44, 1); // the tent stands on the far side: everyone arrives from the south
   q = site('track'); arch(q.x, q.y - 104); P('trough', q.x - 30, q.y + 24); P('palm', q.x + 44, q.y + 30); P('flag', q.x - 96, q.y + 6);
   q = site('farm'); P('house', q.x - 150, q.y - 120); P('basket', q.x - 96, q.y - 84); P('basket', q.x - 150, q.y - 60); for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) P('palm', q.x - 40 + i * 110, q.y - 60 + j * 100, (i + j) % 2);
-  q = site('village'); P('barjeel', q.x, q.y - 126); P('house', q.x - 134, q.y - 36); P('house', q.x + 126, q.y - 60, 1); P('palm', q.x + 66, q.y + 64); P('basket', q.x - 62, q.y + 30); P('well', q.x - 6, q.y + 74);
-  for (let k = 0; k < 340; k++) { const a = k / 340 * TAU; P('post', Math.cos(a) * (R + 12), Math.sin(a) * (R + 12)); } // the ring of flags round the reserve
+  q = site('village'); P('drum', q.x + 150, q.y + 40); P('barjeel', q.x, q.y - 126); P('house', q.x - 134, q.y - 36); P('house', q.x + 126, q.y - 60, 1); P('palm', q.x + 66, q.y + 64); P('basket', q.x - 196, q.y + 6); P('well', q.x - 6, q.y + 74);
+  for (let k = 0; k < 520; k++) { const a = k / 520 * TAU; P('post', CX + Math.cos(a) * (R + 12), CY + Math.sin(a) * (R + 12)); } // the ring of flags round the reserve
   // How much of each thing a region gets, in the order of REG, against 1 for the home sands: lines of dates, jerrycans, the golden dates
   // that move each day, and shrubs. The oasis belt is rich in dates, the Empty Quarter is short of fuel and long on gold, nothing grows on the salt.
-  const D_DATE = [1, 0.35, 0.9, 0.55, 0.8, 2.2], D_CAN = [1, 1, 1, 0.3, 1, 1.2], D_GOLD = [0.5, 0.4, 0.6, 1, 0.4, 0.4], D_SHRUB = [1, 0, 0.6, 0.35, 1.6, 2.2];
+  const CAN_Q = [2, 6, 5], D_DATE = [1, 0.35, 0.9, 0.55, 0.8, 2.2], D_CAN = [1, 1, 1, 0.3, 1, 1.2], D_GOLD = [0.5, 0.4, 0.6, 1, 0.4, 0.4], D_SHRUB = [1, 0, 0.6, 0.35, 1.6, 2.2];
   const dens = (x, y, d) => { region(x, y); let v = 0; for (let i = 0; i < 6; i++) v += RW[i] * d[i]; return v; };
-  for (let j = -25; j <= 25; j++) for (let i = -25; i <= 25; i++) { // scattered desert shrubs, and in the oasis belt palms standing alone on the sand, to weave between
-    const x = (i + hash2(i + 7, j)) * 280, y = (j + hash2(i, j - 7)) * 280, clear = m => Math.hypot(x, y) < R - 80 - m && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + 30 + m);
+  for (let j = -68; j <= 9; j++) for (let i = -38; i <= 38; i++) { // scattered desert shrubs, and in the oasis belt palms standing alone on the sand, to weave between
+    const x = (i + hash2(i + 7, j)) * 280, y = (j + hash2(i, j - 7)) * 280, clear = m => rimD(x, y) < R - 80 - m && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + 30 + m);
     if (hash2(i, j + 99) < 0.3 * dens(x, y, D_SHRUB) && clear(0)) P('shrub', x, y, hash2(i, j) > 0.5);
     else if (RW[5] > 0.75 && hash2(i + 31, j - 17) < 0.2 && clear(120)) P('palm', x, y, hash2(i, j) > 0.5);
   }
-  // What is scattered on the sand: 180 lines of dates curving across the dunes, and 10 jerrycans a long way apart, a few more of them
+  // What is scattered on the sand: 180 lines of dates curving across the dunes, and 14 jerrycans a long way apart, a few more of them
   // towards the middle than out by the rim. Fuel has to be looked for on the map. The first jerrycan is always in the same place near
   // the camp, so a first run can always reach one.
   const scatter = r => { const dates = [], cans = [{ x: 540, y: -280 }];
-    for (let k = 0, tries = 0; k < 180 && tries < 4000; tries++) {
-      const a = r() * TAU, d = 300 + Math.sqrt(r()) * (R - 560); let x = Math.cos(a) * d, y = Math.sin(a) * d; if (r() * 2.2 > dens(x, y, D_DATE)) continue; k++;
+    for (let k = 0, tries = 0; k < 460 && tries < 9000; tries++) {
+      const a = r() * TAU, d = Math.sqrt(r()) * (R - 260); let x = CX + Math.cos(a) * d, y = CY + Math.sin(a) * d; if (Math.hypot(x, y) < 300 || r() * 2.2 > dens(x, y, D_DATE)) continue; k++;
       const bend = (r() - 0.5) * 0.3, n = 5 + (r() * 3 | 0); let an = r() * TAU;
-      for (let i = 0; i < n; i++) { if (Math.hypot(x, y) < R - 120) dates.push({ x, y }); an += bend; x += Math.cos(an) * 48; y += Math.sin(an) * 48; }
+      for (let i = 0; i < n; i++) { if (rimD(x, y) < R - 120) dates.push({ x, y }); an += bend; x += Math.cos(an) * 48; y += Math.sin(an) * 48; }
     }
-    for (let tries = 0; cans.length < 10 && tries < 4000; tries++) { const a = r() * TAU, d = 500 + Math.pow(r(), 0.7) * (R - 760), x = Math.cos(a) * d, y = Math.sin(a) * d;
-      if (r() * 1.2 < dens(x, y, D_CAN) && cans.every(o => Math.hypot(o.x - x, o.y - y) > 2700) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) cans.push({ x, y }); }
+    // jerrycans, so many to each area (home, second, third) and never on the face of an 'arqoub
+    const got = [0, 0, 0]; for (let tries = 0; cans.length < 14 && tries < 9000; tries++) { const a = r() * TAU, d = Math.sqrt(r()) * (R - 500), x = CX + Math.cos(a) * d, y = CY + Math.sin(a) * d, z = zoneAt(x, y);
+      if (got[z] < CAN_Q[z] && WH[0] + WH[1] < 50 && Math.hypot(x - MRB.x, y - MRB.y) > 2400 && r() * 1.2 < dens(x, y, D_CAN) && cans.every(o => Math.hypot(o.x - x, o.y - y) > 2300) && SITES.every(s => Math.hypot(s.x - x, s.y - y) > 150)) { cans.push({ x, y }); got[z]++; } }
     return { dates, cans }; };
   // The dates and jerrycans are dealt afresh every day (dealDay, below). The playground has its own fixed stream of numbers, so it never moves.
   const r = rng(20261119);
   // The playground. Ramps: wooden kickers that throw the car into the air, each turned to face the longest drop it can find. Half of them
   // have a hoop to fly through, and some a boost strip on the run-up, so a strip, a ramp and a hoop make one line to drive.
   const slope = (x, y) => Math.hypot(H(x + 6, y) - H(x - 6, y), H(x, y + 6) - H(x, y - 6)) / 12;
-  const open = (x, y, m) => Math.hypot(x, y) < R - 420 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + m) && PROPS.every(p => !p.rad || Math.hypot(p.x - x, p.y - y) > p.rad + 90);
-  for (let tries = 0; RAMPS.length < 56 && tries < 20000; tries++) {
-    const first = !RAMPS.length, a = r() * TAU, d = first ? 420 + r() * 160 : 500 + Math.sqrt(r()) * (R - 1000), x = Math.cos(a) * d, y = Math.sin(a) * d;
-    if (!open(x, y, 170) || slope(x, y) > 0.15 || RAMPS.some(o => Math.hypot(o.x - x, o.y - y) < 700) || Math.hypot(x - 540, y + 280) < 300 || Math.hypot(x - 300, y - 85) < 330) continue; // and clear of the first jerrycan and the lesson's trail of dates
+  const SOLID = PROPS.filter(q => q.rad), open = (x, y, m) => rimD(x, y) < R - 420 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + m) && SOLID.every(q => Math.hypot(q.x - x, q.y - y) > q.rad + 90); // SOLID: the things a car cannot drive through
+  for (let tries = 0; RAMPS.length < 120 && tries < 40000; tries++) {
+    const first = !RAMPS.length, a = r() * TAU, d = first ? 420 + r() * 160 : Math.sqrt(r()) * (R - 600), x = (first ? 0 : CX) + Math.cos(a) * d, y = (first ? 0 : CY) + Math.sin(a) * d; // the first ramp is by the camp, for the lesson
+    if (slope(x, y) > 0.15 || RAMPS.some(o => Math.hypot(o.x - x, o.y - y) < 800) || !open(x, y, 170) || Math.hypot(x - 540, y + 280) < 300 || Math.hypot(x - 300, y - 85) < 330) continue; // and clear of the first jerrycan and the lesson's trail of dates
     let dir = -1, low = 1e9; for (let k = 0; k < 16; k++) { const an = k / 16 * TAU, cs = Math.cos(an), sn = Math.sin(an);
       if (slope(x - cs * 150, y - sn * 150) > 0.3 || H(x - cs * 150, y - sn * 150) > H(x, y) + 22 || !open(x - cs * 200, y - sn * 200, 0) || !open(x + cs * 320, y + sn * 320, 40)) continue; // the run-up has to be drivable, and neither it nor the landing may be in a camp or against a palm
       const hh = H(x + cs * 150, y + sn * 150) + H(x + cs * 300, y + sn * 300); if (hh < low) { low = hh; dir = an; } }
@@ -809,11 +861,11 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
     if (i % 2 === 0) HOOPS.push({ kind: 'hoop', x: x + cs * 145, y: y + sn * 145, a: dir, cs, sn }); // close enough that the car is at ring height as it passes, slow or boosted
     if (i % 3 === 0 && open(x - cs * 330, y - sn * 330, 60)) PADS.push({ x: x - cs * 330, y: y - sn * 330, a: dir, cs, sn, cd: 0 });
   }
-  for (let tries = 0, n = PADS.length + 24; PADS.length < n && tries < 9000; tries++) { // more boost strips out on the open sand, pointing downwind where the crests are
-    const a = r() * TAU, d = 600 + Math.sqrt(r()) * (R - 1100), x = Math.cos(a) * d, y = Math.sin(a) * d, dir = Math.atan2(WY, WX) + (r() - 0.5) * 0.9;
-    if (open(x, y, 120) && slope(x, y) < 0.2 && PADS.every(o => Math.hypot(o.x - x, o.y - y) > 600) && RAMPS.every(o => Math.hypot(o.x - x, o.y - y) > 200)) PADS.push({ x, y, a: dir, cs: Math.cos(dir), sn: Math.sin(dir), cd: 0 });
+  for (let tries = 0, n = PADS.length + 50; PADS.length < n && tries < 20000; tries++) { // more boost strips out on the open sand, pointing downwind where the crests are
+    const a = r() * TAU, d = Math.sqrt(r()) * (R - 700), x = CX + Math.cos(a) * d, y = CY + Math.sin(a) * d, dir = Math.atan2(WY, WX) + (r() - 0.5) * 0.9;
+    if (slope(x, y) < 0.2 && open(x, y, 120) && PADS.every(o => Math.hypot(o.x - x, o.y - y) > 600) && RAMPS.every(o => Math.hypot(o.x - x, o.y - y) > 200)) PADS.push({ x, y, a: dir, cs: Math.cos(dir), sn: Math.sin(dir), cd: 0 });
   }
-  // Today's sand. The lines of dates, the jerrycans and eight of the golden dates are placed from the date, so every day is a different
+  // Today's sand. The lines of dates, the jerrycans and fourteen of the golden dates are placed from the date, so every day is a different
   // map to learn, and everyone playing that day has the same one. What never moves: the trail of six dates out of the camp, the first
   // jerrycan, a golden date (worth ten) on the top of every big dune, and the ramps, hoops and boost strips.
   dealDay = () => {
@@ -822,33 +874,37 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
     DATES.length = 0; for (let i = 0; i < 6; i++) DATES.push({ x: 170 + i * 48, y: 91 - i * 13.8 }); for (const o of s.dates) DATES.push(o); // the lesson's trail lies dead ahead of where the car starts (resetCar), so driving straight on collects all six
     CANS.length = 0; for (const o of s.cans) CANS.push(o);
     GOLD.length = 0; for (const q of HILLS) GOLD.push({ x: q.x, y: q.y });
-    for (let tries = 0; GOLD.length < HILLS.length + 8 && tries < 4000; tries++) { const a = g() * TAU, d = 700 + Math.sqrt(g()) * (R - 1200), x = Math.cos(a) * d, y = Math.sin(a) * d; if (g() < dens(x, y, D_GOLD) && open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 900)) GOLD.push({ x, y }); }
+    for (let tries = 0; GOLD.length < HILLS.length + 14 && tries < 6000; tries++) { const a = g() * TAU, d = Math.sqrt(g()) * (R - 800), x = CX + Math.cos(a) * d, y = CY + Math.sin(a) * d; ridgeT(x, y); if (WH[0] + WH[1] < 50 && Math.hypot(x - MRB.x, y - MRB.y) > 2400 && g() < dens(x, y, D_GOLD) && open(x, y, 80) && GOLD.every(o => Math.hypot(o.x - x, o.y - y) > 900)) GOLD.push({ x, y }); }
   };
   dealDay();
   const herd = (kind, id, n, spread) => { const s = typeof id === 'string' ? site(id) : id; for (let k = 0; k < n; k++) { const a = k / n * TAU + 0.6, x = s.x + Math.cos(a) * spread, y = s.y + Math.sin(a) * spread * 0.7;
     ANIMALS.push({ kind, x, y, hx: s.x, hy: s.y, tx: x, ty: y, ph: k, dir: k % 2 ? 1 : -1, wait: 1 + k, run: 0, rx: 0, ry: 0, rad: KIND[kind][2] }); } };
   herd('camel', 'camels', 5, 130); herd('oryx', 'oryx', 4, 110); herd('camel', 'track', 4, 185); // racing camels round their track
-  herd('gazelle', { x: 1750, y: -330 }, 5, 90); herd('gazelle', { x: -1480, y: -1480 }, 4, 80); herd('gazelle', { x: -200, y: 950 }, 3, 70); herd('camel', { x: 1250, y: 380 }, 2, 60); // loose herds out on the sand
-  herd('gazelle', { x: -3000, y: 1700 }, 5, 90); herd('gazelle', { x: 2300, y: -2300 }, 4, 80); herd('gazelle', { x: 900, y: 4800 }, 4, 80); herd('gazelle', { x: -1900, y: -3000 }, 4, 80); herd('camel', { x: -3300, y: -700 }, 3, 70); herd('oryx', { x: 3900, y: 1900 }, 3, 80); // and further out
-  herd('oryx', { x: -3600, y: 2900 }, 4, 90); herd('gazelle', { x: -2600, y: 4400 }, 5, 90); herd('camel', { x: -4600, y: 3300 }, 3, 70); // the gravel plain is where the animals are
+  // Other cars on the 'arqoubs: each crawls up the southern face, rests on the crest and comes back down, over and over. They are
+  // there for scale, and because nobody climbs a great dune alone.
+  for (let k = 0; k < 2; k++) for (let i = 0; i < 10; i++) { const x = -8100 + i * 1800 + (hash2(i, k + 40) - 0.5) * 1000, y0 = RNG[k].y + RNG[k].fs * 0.85, y1 = RNG[k].y + 140; if (rimD(x, y0) > R - 500 || rimD(x, y1) > R - 500) continue;
+    CLIMB.push({ kind: 'npc', x, y: y1 + (y0 - y1) * hash2(i, k + 60), y0, y1, dir: -1, wait: 0, sp: 55 + hash2(i, k + 80) * 45, truck: ['classic', 'pickup', 'buggy', 'monster'][(i + k) % 4], col: Object.values(COLORS)[(i * 2 + k) % 5], rad: 20 }); }
+  herd('gazelle', { x: 1750, y: -330 }, 5, 90); herd('gazelle', { x: -1900, y: 700 }, 4, 80); herd('gazelle', { x: -200, y: 950 }, 3, 70); herd('camel', { x: 1250, y: 380 }, 2, 60); // loose herds on the home sands
+  herd('gazelle', { x: -3000, y: -7400 }, 5, 90); herd('gazelle', { x: 2700, y: -6600 }, 4, 80); herd('camel', { x: -3300, y: -6000 }, 3, 70); herd('oryx', { x: 600, y: -6300 }, 4, 90); herd('gazelle', { x: 2400, y: -9000 }, 5, 90); herd('camel', { x: -600, y: -9000 }, 3, 70); // the second area; most of them on the gravel plain
+  herd('gazelle', { x: -1900, y: -15300 }, 4, 80); herd('gazelle', { x: 400, y: -14900 }, 4, 80); herd('camel', { x: 6600, y: -14800 }, 3, 70); // and the third
 })();
 
 // ---------- state ----------
 let st = 'load', t = 0, W = 0, Hh = 0, zoom = 1, dpr = 1, rs = 1, camx = 0, camy = 0, shake = 0, noteT = 0, slow = 0, hudKey = '', miniTick = 0, edgeT = 0, hitT = 0;
 const car = {}, run = { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], fuel: 100, max: 100, over: 0, low: false, seen: {}, vis: [], live: false };
-const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700, hop: 1.15, cl: 0.6 }; // what the upgrades change, set at the start of a run
+const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700, hop: 1.15, cl: 0.6, turbo: 0, drag: 1 }; // what the upgrades change, set at the start of a run
 const parts = [], floats = [], tracks = [[], [], [], []], keys = {}, joy = { on: false, hard: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 }; // tracks: two tyre marks, and two darker ones laid down while sliding
 const rings = []; let camZ = 1; // rings: circles of dust spreading on the sand; camZ: the view pulls back a little at speed and in the air
 let stallT = 0, hintT = 0; // stuck on a steep face with the engine pulling, and how long until the next hint about it
 // What the ground under the car changes, by region (in the order of REG): drag, soft-sand resistance, and sideways grip. On the level
 // the first car tops out near 430 on the home sands, 530 on the salt, 480 on the gravel and 350 in the soft sand of the Empty Quarter.
 const G_DRAG = [1, 0.84, 1, 1.12, 0.93, 1], G_RR = [1, 0.6, 1, 2.2, 0.6, 1], G_GRIP = [0, -0.4, 0, -0.3, 0.8, 0];
-let gDrag = 1, gRr = 1, gGrip = 0;
+let gDrag = 1, gRr = 1, gGrip = 0, wallT = 0; // wallT: seconds until Baba may say again what a ridge needs
 const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // base values; see PH
    TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, HARD_R = 96, TIP = 0.4; // the pad: full throttle at JOY_R from where the finger went down; past HARD_R is pressing hard
 function resetCar() {
   Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0, pit: 0, rol: 0, spin: 0, rside: 1,
-    drift: false, dsc: 0, dyaw: 0, dT: 0, dsn: 0, dl: 0, boostT: 0, rampT: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0, rev: false, sx: 70, sy: 120, st: 0 });
+    drift: false, dsc: 0, dyaw: 0, dT: 0, dsn: 0, dl: 0, boostT: 0, rampT: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0, rev: false, sx: 70, sy: 120, st: 0, tb: 0, tbOn: false, pthr: 0 });
   for (const a of tracks) a.length = 0; parts.length = floats.length = rings.length = 0; stallT = 0; camZ = 1;
 }
 const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
@@ -867,15 +923,19 @@ function notePlace() { // During the first lesson a note must not cover Baba's c
 }
 function float(x, y, txt, col) { floats.push({ x, y, txt, col: col || '#fffaf0', life: 1.3 }); if (floats.length > 12) floats.shift(); }
 // particles. c: 0 dust, 1 thrown wet sand, 2 smoke, 3 flame, 4 gold sparks (sparks fly out and shrink; the rest drift and swell)
-const PCOL = ['244,214,160', '168,112,66', '96,86,80', '255,150,50', '255,232,140'];
+const PCOL = ['244,214,160', '168,112,66', '96,86,80', '255,150,50', '255,232,140', '150,214,255'];
 function puff(x, y, vx, vy, n, big, c = 0) { for (let i = 0; i < n && parts.length < 150; i++) parts.push({ x: x + (Math.random() - 0.5) * 10, y: y + (Math.random() - 0.5) * 10, vx: vx + (Math.random() - 0.5) * 70, vy: vy + (Math.random() - 0.5) * 70, life: 0.5 + Math.random() * 0.4, r: (big ? 7 : 4) + Math.random() * 4, c }); }
+// exhaust smoke: grey, rising, thinning. k 0..1 is how hard the engine is working, which makes it thicker and darker.
+function smoke(x, y, vx, vy, k) { if (parts.length < 190) parts.push({ x, y, vx: vx + (Math.random() - 0.5) * 26, vy: vy + (Math.random() - 0.5) * 26, life: 0.5 + Math.random() * 0.4, r: 2.5 + 3.5 * k + Math.random() * 2, c: 2, up: 28, a: 0.16 + 0.3 * k }); }
 function spark(x, y, n, c = 4) { for (let i = 0; i < n && parts.length < 150; i++) { const a = Math.random() * TAU, v = 90 + Math.random() * 170; parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.35 + Math.random() * 0.3, r: 3 + Math.random() * 3, c, s: 1 }); } }
 function ring(x, y, col, r = 16) { rings.push({ x, y, r, life: 1, col }); if (rings.length > 8) rings.shift(); }
 
 // ---------- missions, levels, races ----------
 // What keeps a run worth starting: three missions at a time (a new one replaces each finished one, harder as the
 // level rises), levels from experience, and timed races between places with bronze, silver and gold times.
-const UPS = ['engine', 'tyres', 'balance', 'tank', 'magnet'], UP_COST = [100, 250, 500, 900, 1500];
+const UPS = ['engine', 'turbo', 'tyres', 'balance', 'tank', 'magnet'], UP_COST = [100, 250, 500, 900, 1500], ENGINE_COST = [150, 400, 900, 1600, 2600], TURBO_COST = [2500, 6000]; // the engine and the turbo are what the 'arqoubs ask for, and cost more than the rest
+const upMax = uid => uid === 'turbo' ? 2 : 5, upCost = (uid, lv) => uid === 'turbo' ? TURBO_COST[lv] : uid === 'engine' ? ENGINE_COST[lv] : UP_COST[lv]; // the turbo comes in two steps, single then twin; the rest in five
+const wallGoal = () => { const k = nextGate(); return k > 3 ? '' : T('wallGoal', T('wallName')[k - 1], T('need')[k - 1]); }; // what stands between the player and the next layer
 const xpNeed = l => 70 + 50 * l + 5 * l * l, RANKS = [1, 3, 6, 10, 15];
 // what each level opens. The next one is always on show, on the results card and the missions sheet, so there is something to play for.
 const UNLOCKS = [[2, 'un_race'], [3, 't_pickup'], [4, 'un_slot'], [5, 'un_race'], [6, 't_buggy'], [7, 'un_grand'], [8, 'un_slot'], [9, 'un_race'], [10, 't_monster'], [11, 'un_race'], [12, 'un_race']];
@@ -899,7 +959,7 @@ function addXP(n) {
 const MK = {
   fog: ['e', 2, 5, 1, 20, 1, 1.3], regions: ['e', 2, 2, 0.3, 6, 1, 1.3], rdates: ['c', 2, 10, 3, 60, 5, 1.3], rdist: ['d', 3, 300, 80, 2500, 50, 1.3], rdrift: ['s', 3, 150, 40, 1500, 10, 1.4], rair: ['s', 3, 2.5, 0.5, 14, 0.5, 1.4], // the regions: see mRaw
   dates: ['c', 1, 20, 5, 100, 5, 1], rush: ['c', 3, 10, 2, 36, 1, 1.3], cans: ['c', 2, 1, 0.34, 6, 1, 1], earn: ['c', 4, 15, 4, 110, 5, 1.2], gold: ['c', 2, 1, 0.3, 5, 1, 1.4],
-  dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 250, 35, 810, 10, 1],
+  dist: ['d', 1, 800, 200, 4500, 100, 1], noroll: ['d', 1, 650, 150, 3000, 50, 1], speed: ['d', 2, 140, 5, 210, 5, 1.1], far: ['d', 2, 250, 60, 2000, 10, 1],
   air: ['s', 1, 2.5, 0.5, 12, 0.5, 1.2], jump: ['s', 1, 0.6, 0.05, 1.6, 0.1, 1.2], drift: ['s', 1, 280, 80, 3000, 20, 1.2], bigdrift: ['s', 3, 120, 20, 500, 10, 1.3],
   donut: ['s', 3, 1, 0.3, 5, 1, 1.3], two: ['s', 2, 2, 0.4, 10, 0.5, 1.4], twohold: ['s', 4, 1, 0.12, 3, 0.1, 1.5], flip: ['s', 2, 1, 0.2, 4, 1, 1.5],
   spin: ['s', 2, 1, 0.25, 5, 1, 1.3], stunt: ['s', 1, 550, 150, 8000, 50, 1.2], combo: ['s', 2, 2, 0.34, CH_MAX, 1, 1.3],
@@ -909,7 +969,7 @@ const MK = {
   tdates: ['t', 2, 110, 30, 1e9, 10, 1.4], tdist: ['t', 2, 3600, 600, 1e9, 100, 1.4], tstunt: ['t', 3, 2500, 600, 1e9, 100, 1.4], tair: ['t', 3, 12, 2.5, 1e9, 1, 1.4], tvisit: ['t', 3, 8, 1.5, 1e9, 1, 1.4],
 };
 const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1, two: 1, twohold: 1, rair: 1 }; // how often each category is dealt; the kinds counted in tenths
-const slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
+const RKIND = new Set(['regions', 'rdates', 'rdist', 'rdrift', 'rair']), slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
 // A mission can also be dealt in the middle of a run, to take the place of one just finished. It then counts from that moment: kinds that add
 // up (ADD) start from what the run has already done, and the others are only dealt if the run is still under half way to their target.
 const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem', 'regions', 'rdates', 'rdist', 'rdrift', 'rair', 'fog']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal']);
@@ -923,8 +983,8 @@ function newMission(avoid, live) { // avoid: the kind being swapped away, which 
 }
 function dealMission(avoid, bad, L, act, catN) {
   // A mission never sends the player to a place that is not on their map yet: those are found by exploring, not by being told.
-  const known = SITES.filter(q => save.cards.includes(q.id)), there = known.filter(q => q.id !== 'camp' && !q.hill).sort((q1, q2) => Math.hypot(q1.x, q1.y) - Math.hypot(q2.x, q2.y));
-  const can = k => k === 'goto' || k === 'dash' ? there.length > 0 : k === 'deliver' ? known.filter(q => !q.hill).length > 1 : k === 'summit' ? save.cards.includes('moreeb') : k === 'fog' ? fogIn < FOG_TOT * 0.7 : true;
+  const gm = gateMax(), known = SITES.filter(q => save.cards.includes(q.id) && canReach(q)), near0 = a => a.filter(o => inReach(o.x, o.y)).length, there = known.filter(q => q.id !== 'camp' && !q.hill).sort((q1, q2) => Math.hypot(q1.x, q1.y) - Math.hypot(q2.x, q2.y));
+  const can = k => k === 'goto' || k === 'dash' ? there.length > 0 : k === 'deliver' ? known.filter(q => !q.hill).length > 1 : k === 'summit' ? gm > 2 && save.cards.includes('moreeb') : k === 'fog' ? gm > 0 && fogIn < FOG_TOT * 0.7 : RKIND.has(k) ? gm > 0 : k === 'hoop' ? near0(HOOPS) > 0 : k === 'gold' ? near0(GOLD) > 0 : true; // the region missions (regions, rdates, rdist, rdrift, rair) wait until the first ridge is crossed
   let pool = Object.keys(MK).filter(k => k !== avoid && !bad.has(k) && can(k) && MK[k][1] <= L && !act.some(m => m.t === k) && !('rt'.includes(MK[k][0]) && catN(MK[k][0]))); // one race mission and one long mission at a time
   if (!pool.length) pool = ['dist', 'stunt', 'dates', 'air', 'drift', 'boost'].filter(k => !act.some(m => m.t === k)); if (!pool.length) pool = ['dist'];
   const fresh = pool.filter(k => !save.mrec.includes(k)); if (fresh.length >= 4) pool = fresh;                                         // not one you had a moment ago
@@ -934,9 +994,10 @@ function dealMission(avoid, bad, L, act, catN) {
   const hard = clamp(0.05 + 0.03 * L, 0, 0.45), easy = clamp(0.45 - 0.04 * L, 0.1, 0.45), r = Math.random(), d = r < hard ? 3 : r > 1 - easy ? 1 : 2; // one, two or three stars
   const Le = Math.max(1, L + [-2, 0, 4][d - 1]), m = { t, n: 1, p: 0, d }; let w = w0;                                                   // an easy mission is set as if two levels lower, a hard one four higher
   m.n = Math.min(cap, Math.max(base, Math.round((base + grow * (Le - 1)) * (0.9 + Math.random() * 0.2) / stepN) * stepN)); if (DEC[t]) m.n = Math.round(m.n * 10) / 10;
+  if (t === 'far') m.n = Math.min(m.n, [600, 1150, 2000, 2000][gm]); else if (t === 'visit') m.n = Math.min(m.n, SITES.filter(canReach).length); else if (t === 'hoop') m.n = Math.min(m.n, near0(HOOPS)); else if (t === 'gold') m.n = Math.min(m.n, near0(GOLD)); else if (t === 'cans') m.n = Math.min(m.n, Math.max(1, near0(CANS))); // never more than the layers in reach hold
   if (t === 'goto' || t === 'dash') { // a place to drive to: further out as the level rises, and for a dash, against the clock
     const q = pick(there.slice(0, Math.min(there.length, 2 + Le))), far = Math.hypot(q.x, q.y);
-    m.a = q.id; w += far / R * 0.5; if (t === 'dash') m.s = Math.ceil(far / Math.min(230, 140 + 10 * Le)) + 3;
+    m.a = q.id; w += far / 17000 * 0.5; if (t === 'dash') m.s = Math.ceil(far / Math.min(230, 140 + 10 * Le)) + 3;
   } else if (t === 'deliver') { const ids = known.filter(q => !q.hill).map(q => q.id); m.a = pick(ids); m.b = pick(ids.filter(id => id !== m.a)); }
   if (L >= 5 && 'cds'.includes(cat) && t !== 'noroll' && Math.random() < (d === 3 ? 0.3 : 0.15)) { m.nr = 1; w *= 1.35; }                 // the twist: do it without rolling
   m.rw = Math.max(5, Math.round((25 + L * 5) * w * [0.75, 1, 1.5][d - 1] / 5) * 5); m.xp = Math.round(40 * w * [0.8, 1, 1.4][d - 1]);
@@ -1060,16 +1121,18 @@ function tutEnd(finished) { // finished, skipped, or the run ended under it
   if (st === 'play' || st === 'pause') misHud(true);
 }
 // races: drive through the places in order against the clock. The daily race changes every day.
-const RACES = [
-  { id: 'camp', lvl: 1, pts: ['camp', 'well', 'festival', 'camp'] }, { id: 'oasis', lvl: 2, pts: ['camp', 'festival', 'oasis', 'falcon'] },
-  { id: 'moreeb', lvl: 4, pts: ['well', 'moreeb', 'fort'] }, { id: 'south', lvl: 5, pts: ['fort', 'oryx', 'gate', 'camels'] },
-  { id: 'grand', lvl: 7, pts: ['camp', 'moreeb', 'fort', 'oryx', 'gate', 'camels', 'falcon', 'oasis', 'sabkha', 'camp'] },
-  { id: 'climb', lvl: 3, pts: ['stands', 'moreeb'], tg: [8, 6, 4.8] }, // the hill climb: from the grandstand to the top of Tal Moreeb. Too short for a pace, so its medal times are set by hand.
-  { id: 'salt', lvl: 9, pts: ['sabkha', 'roses', 'village', 'sabkha'] }, { id: 'east', lvl: 11, pts: ['stands', 'moreeb', 'tower', 'fort'] }, { id: 'far', lvl: 12, pts: ['gate', 'farcamp', 'track', 'camels'] },
+const RACES = [ // each is open once its level is reached and every place on it is in an area the car can get to
+  { id: 'camp', lvl: 1, pts: ['camp', 'well', 'camp'] }, { id: 'oasis', lvl: 2, pts: ['camels', 'festival', 'oasis', 'farm'] },
+  { id: 'moreeb', lvl: 4, pts: ['gate', 'stands', 'fort'] }, { id: 'south', lvl: 5, pts: ['track', 'falcon', 'sabkha', 'roses'] },
+  { id: 'grand', lvl: 7, pts: ['camp', 'camels', 'track', 'gate', 'stands', 'fort', 'tower'] }, // the whole journey north, over both 'arqoubs
+  { id: 'climb', lvl: 3, pts: ['stands', 'moreeb'], tg: [26, 19, 14.5] }, // the hill climb: from the grandstand to the top of Tal Moreeb. Its medal times are set by hand.
+  { id: 'salt', lvl: 9, pts: ['sabkha', 'roses', 'falcon', 'sabkha'] }, { id: 'east', lvl: 11, pts: ['stands', 'fort', 'tower', 'stands'] }, { id: 'far', lvl: 12, pts: ['gate', 'farcamp', 'oryx', 'gate'] },
 ];
+const raceOpen = rc => rc.pts.every(id => canReach(site(id)));
 function dailyRace() {
   const d = dayKey(); let h = 7; for (const ch of d) h = Math.imul(h, 31) + ch.charCodeAt(0) | 0;
-  const r = rng(h), left = SITES.slice(), pts = [left.splice(r() * left.length | 0, 1)[0]];
+  const r = rng(h), left = SITES.filter(q => canReach(q) && !q.hill), pts = [left.splice(r() * left.length | 0, 1)[0]]; // only places in reach; with just the camp and the well, there and back
+  if (left.length < 3) return { id: 'daily', key: 'daily:' + d, lvl: 1, pts: [pts[0].id, left[0].id, pts[0].id] };
   while (pts.length < 4) { const a = pts[pts.length - 1]; left.sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y)); pts.push(left.splice(r() * 3 | 0, 1)[0]); } // each leg goes to one of the three nearest places not yet used, so the race of the day is a tour of one part of the reserve, never three crossings of it
   return { id: 'daily', key: 'daily:' + d, lvl: 1, pts: pts.map(q => q.id) };
 }
@@ -1077,9 +1140,9 @@ const raceKey = rc => rc.key || rc.id, reach = s => s.hill ? 130 : s.r + 50;
 function raceLen(rc) { let L = 0; for (let i = 1; i < rc.pts.length; i++) { const a = site(rc.pts[i - 1]), b = site(rc.pts[i]); L += Math.hypot(a.x - b.x, a.y - b.y); } return L; }
 // How fast each region's ground lets a car go, against 1 for the home sands (measured with a car driven straight): a race is timed for the ground it crosses.
 const G_PACE = [1, 1.3, 0.95, 0.86, 1.1, 0.97];
-function raceEff(rc) { let L = 0; for (let i = 1; i < rc.pts.length; i++) { const a = site(rc.pts[i - 1]), b = site(rc.pts[i]); let inv = 0; for (let k = 0; k < 8; k++) { region(a.x + (b.x - a.x) * (k + 0.5) / 8, a.y + (b.y - a.y) * (k + 0.5) / 8); for (let r = 0; r < 6; r++) inv += RW[r] / G_PACE[r]; } L += Math.hypot(a.x - b.x, a.y - b.y) * inv / 8; } return L; }
-const raceTargets = rc => { if (rc.tg) return rc.tg; const L = raceEff(rc), k = 3 + rc.pts.length; return [L / 160 + k, L / 220 + k, L / 285 + k]; }; // bronze, silver, gold, in seconds: a pace over the route's ground, plus time to get going and to turn at each place. A clean straight drive in the first car, with nothing upgraded, holds about 330 on the home sands.
-const GH_KEY = 'abood-liwa-ghost2'; let ghosts = {}; // 2: ghosts of the bigger map
+function raceEff(rc) { let L = 0; for (let i = 1; i < rc.pts.length; i++) { const a = site(rc.pts[i - 1]), b = site(rc.pts[i]); let inv = 0; for (let k = 0; k < 24; k++) { const x = a.x + (b.x - a.x) * (k + 0.5) / 24, y = a.y + (b.y - a.y) * (k + 0.5) / 24; region(x, y); ridgeT(x, y); if (WH[0] + WH[1] > 60) inv += 2.4; else for (let r = 0; r < 6; r++) inv += RW[r] / G_PACE[r]; } L += Math.hypot(a.x - b.x, a.y - b.y) * inv / 24; } return L; } // an 'arqoub on the way counts for well over twice its length
+const raceTargets = rc => { if (rc.tg) return rc.tg; const L = raceEff(rc) / [1, 1.3, 1.5, 1.5][Math.max(...rc.pts.map(id => site(id).zone))], k = 3 + rc.pts.length; return [L / 160 + k, L / 220 + k, L / 285 + k]; }; // bronze, silver, gold, in seconds: a pace over the route's ground, plus time to get going and to turn at each place. A clean straight drive in the first car, with nothing upgraded, holds about 330 on the home sands. A race in the second or third area is run in a car with the engine those areas ask for, which is faster, so its pace is set higher.
+const GH_KEY = 'abood-liwa-ghost4'; let ghosts = {}; // 4: ghosts driven on the reserve as it is now
 try { ghosts = JSON.parse(localStorage.getItem(GH_KEY) || '{}') || {}; } catch (e) {}
 function finishRace() {
   const rc = run.race, key = raceKey(rc), tg = raceTargets(rc), tm = run.rt, medal = tm <= tg[2] ? 3 : tm <= tg[1] ? 2 : tm <= tg[0] ? 1 : 0, had = save.medals[key] || 0, k = Math.max(1, Math.round(raceLen(rc) / 8000));
@@ -1118,7 +1181,7 @@ function startRoll(dx, dy) { // the car goes over and tumbles in the direction (
   float(car.x, car.y - 40, T('rolled'), '#ffd9d0'); note(pick(T('baba')), 'baba', 2.6);
 }
 function rescue() { // move a trapped car to the nearest open, fairly level sand, looking behind it first
-  const e = 4, free = (x, y) => Math.hypot(x, y) < R - 70 && Math.hypot(H(x + e, y) - H(x - e, y), H(x, y + e) - H(x, y - e)) / (2 * e) < 0.4 && PROPS.every(p => !p.rad || Math.hypot(p.x - x, p.y - p.rad * 0.35 - y) > p.rad + 62) && ANIMALS.every(a => Math.hypot(a.x - x, a.y - y) > 70);
+  const e = 4, free = (x, y) => rimD(x, y) < R - 70 && !lockAt(x, y).k && Math.hypot(H(x + e, y) - H(x - e, y), H(x, y + e) - H(x, y - e)) / (2 * e) < 0.4 && PROPS.every(p => !p.rad || Math.hypot(p.x - x, p.y - p.rad * 0.35 - y) > p.rad + 62) && ANIMALS.every(a => Math.hypot(a.x - x, a.y - y) > 70);
   car.st = 0; car.sx = car.x; car.sy = car.y; run.tows = (run.tows || 0) + 1;
   for (const d of [80, 120, 170, 230, 300, 400]) for (let k = 0; k < 12; k++) { const a = car.ang + Math.PI + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * TAU / 12, x = car.x + Math.cos(a) * d, y = car.y + Math.sin(a) * d; if (!free(x, y)) continue;
     puff(car.x, car.y, 0, 0, 10, true); Object.assign(car, { x, y, sx: x, sy: y, vx: 0, vy: 0, z: H(x, y), gvz: 0, tip: 0, safe: 1.2, rev: false, ang: Math.atan2(y - car.y, x - car.x) }); endDrift();
@@ -1150,6 +1213,18 @@ function update(dt) {
   car.steer += (steer - car.steer) * Math.min(1, dt * 9); car.thr = thr; car.safe -= dt;
   car.x += car.vx * dt; car.y += car.vy * dt;
   const e = 3, h0 = H(car.x, car.y), gx = (H(car.x + e, car.y) - H(car.x - e, car.y)) / (2 * e), gy = (H(car.x, car.y + e) - H(car.x, car.y - e)) / (2 * e);
+  // A great ridge this car cannot climb yet: the sand takes its speed away as it goes up the face, and near the crest it gets no further.
+  // This is done to the car's motion towards the far side, on the ground or in the air, so no run-up or jump gets over.
+  lockAt(car.x, car.y); const lockB = LK.b, lockNx = LK.nx, lockNy = LK.ny;
+  if (LK.k) { const v = car.vx * lockNx + car.vy * lockNy; if (v > 0) { const k = Math.min(1, (LK.hard ? 16 : 5 * lockB) * dt); car.vx -= lockNx * v * k; car.vy -= lockNy * v * k; } if (LK.hard) { car.vx -= lockNx * 260 * dt; car.vy -= lockNy * 260 * dt; }
+    if (lockB > 0.45 && wallT <= 0 && !run.race) { wallT = 8; note(T('wall', T('need')[LK.k - 1]), 'baba', 4); play('lose', 1.3, 0.5); } }
+  wallT -= dt;
+  // An 'arqoub the car is ready for is still a long climb: the sand lets it go up the face only so fast. A stronger engine than the
+  // 'arqoub asks for climbs faster, and so does a turbo that is on. upX, upY: the way up; upCap: the climbing speed, 0 away from any such face.
+  let upX = 0, upY = 0, upCap = 0;
+  if (!LK.k) { ridgeT(car.x, car.y); const t1 = WT[0], t2 = WT[1], on = t => t !== 9 && t > -0.95 && t < 0.95 && (t > 0.04 || t < -0.04), k = on(t2) ? 2 : on(t1) ? 1 : 0;
+    if (k) { upY = (k === 2 ? t2 : t1) < 0 ? -1 : 1; upCap = 125 + 45 * (save.up.engine - GATES[k].engine); }
+    else { const dx = MRB.x - car.x, dy = MRB.y - car.y, dm = Math.hypot(dx, dy); if (dm < 2400 && dm > 90) { upX = dx / dm; upY = dy / dm; upCap = 125; } } }
   region(car.x, car.y); gDrag = gRr = gGrip = 0; for (let i = 0; i < 6; i++) { gDrag += RW[i] * G_DRAG[i]; gRr += RW[i] * G_RR[i]; gGrip += RW[i] * G_GRIP[i]; }
   let sp = Math.hypot(car.vx, car.vy); run.dist += sp * dt; run.nr += sp * dt; if (run.nr > run.noRoll) run.noRoll = run.nr; if (RW[3] > 0.5) run.rDist += sp * dt;
   // A ramp: crossed the right way, on the wheels or skimming just above the sand, it throws the car up. Faster in is higher out.
@@ -1202,15 +1277,21 @@ function update(dt) {
     // and at a crawl low gear adds as much again and more. From rest it pulls 3 × 350 = 1050 against 700 per unit of slope plus the sand's 26,
     // so it climbs a slope of 1.46; the steepest slip face outside Tal Moreeb is 1.10. On the level the car pulls away as it always has.
     const up = sstep(0.1, 0.4, sf), low = 1 + up * (PH.cl + 1.4 * clamp(1 - Math.abs(f) / 170, 0, 1));
-    const push = thr > 0 ? thr * PH.acc * low : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * (car.rev ? 0.8 : 0.5)) : 0;
-    f += (push - GR * sf - DRAG * gDrag * f) * dt; f -= clamp(f, -PH.rr * gRr * dt, PH.rr * gRr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
+    // The turbo: after most of a second with the foot flat down it comes on, and gives the engine more pull for as long as it stays down.
+    if (PH.turbo) { car.tb = thr > 0.85 && !car.rev ? Math.min(1, car.tb + dt * 1.3) : Math.max(0, car.tb - dt * 3); const on = car.tb >= 1;
+      if (on && !car.tbOn) { play('whoosh', 1.7, 0.7); buzz(25); shake = Math.max(shake, 4); float(car.x, car.y - 122, T('turboOn')[PH.turbo - 1], '#bfe6ff'); car.boostT = Math.max(car.boostT, 0.5); } car.tbOn = on; }
+    // (The turbo is for pulling: all of it up to a fair speed, and only a fifth of it flat out, so it climbs and gets away but does not turn the car into a rocket.)
+    const hold = lockB > 0 && cs * lockNx + sn * lockNy > 0.15 ? 1 - 0.85 * lockB : 1; // the engine of a car that is not ready digs in on a ridge face instead of pulling
+    const push = (thr > 0 ? thr * PH.acc * low * (car.tbOn ? 1 + 0.18 * PH.turbo * clamp((430 - f) / 170, 0.2, 1) : 1) : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * (car.rev ? 0.8 : 0.5)) : 0) * hold;
+    f += (push - GR * sf - DRAG * gDrag * PH.drag * f) * dt; f -= clamp(f, -PH.rr * gRr * dt, PH.rr * gRr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
+    if (upCap) { const cu = cs * upX + sn * upY; if (cu > 0.25) { const cap = (upCap + (car.tbOn ? 65 : 0)) / cu; if (f > cap) f -= (f - cap) * Math.min(1, 5 * dt); } } // going up a great ridge
     l += -GR * sl * dt; l *= Math.exp(-(car.drift ? (want ? 1.05 + 3 * Math.max(0, slip - 0.85) : 3) : PH.grip + gGrip) * dt); // the slope pulls sideways; the tyres only half hold in sand, hardly at all in a slide, and bite again once it is let go
     car.vx = cs * f - sn * l; car.vy = sn * f + cs * l; sp = Math.hypot(car.vx, car.vy);
     const gvz = gx * car.vx + gy * car.vy;
     if ((car.gvz - gvz) / dt > GRAV * (0.75 + 0.9 * sstep(400, 560, sp)) && sp > 120) { car.air = true; car.vz = car.gvz; car.airT = 0; car.z = h0; play('whoosh', 1, 0.7); } // the ground drops away faster than gravity: take off. Boosted well past its own top speed the car holds the sand harder, or it would skim every swell with no steering.
     else car.z = h0;
     car.gvz = gvz;
-    if (thr > 0.5 && sp < 35 && sf > 0.36) { stallT += dt; if (stallT > 0.9 && hintT <= 0) { hintT = 12; note(T('stall'), 'baba', 3.2); } } else stallT = 0; // stopped on a face too steep even for low gear (Tal Moreeb has them): Baba says how to get up it
+    if (thr > 0.5 && sp < 35 && sf > 0.36 && lockB <= 0) { stallT += dt; if (stallT > 0.9 && hintT <= 0) { hintT = 12; note(T('stall'), 'baba', 3.2); } } else stallT = 0; // stopped on a face too steep even for low gear (Tal Moreeb has them): Baba says how to get up it
     if (car.air) { endTwo(); car.a0 = car.ang; // a slide is not ended by taking off: a short hop over a crest carries it through
       car.trick = null; car.fp = car.fy = 0; if (car.vz > 0) car.vz *= PH.hop; }
     if (car.drift) { // points for how sideways and how fast; a full circle is a donut
@@ -1229,19 +1310,28 @@ function update(dt) {
     if (!car.roll && !car.air) {
       if (thr > 0.5 && (sf > 0.22 || Math.abs(f) < 70) && Math.random() < dt * 34) puff(car.x - cs * 40, car.y - sn * 40, -cs * (170 + sf * 200), -sn * (170 + sf * 200), 1, true, 1); // working hard, uphill or pulling away: the wheels throw a tail of sand
       if ((thr > 0.3 && sp > 50) || Math.abs(l) > 55) { if (Math.random() < dt * (14 + sp * 0.06) * (car.drift ? 4 : 1)) puff(car.x - cs * 38 + (Math.random() - 0.5) * 50 * sn, car.y - sn * 38 - (Math.random() - 0.5) * 50 * cs, -car.vx * 0.25 - (car.drift ? sn * l * 0.5 : 0), -car.vy * 0.25 + (car.drift ? cs * l * 0.5 : 0), 1, car.drift); }
+      // The exhaust: a wisp at a steady speed, a thick grey plume when the engine is working hard, pulling away or climbing.
+      const exx = car.x - cs * 46 + sn * 10, exy = car.y - sn * 46 - cs * 10 - 9;
+      if (car.tbOn && Math.random() < dt * 34 * PH.turbo) { const sd = PH.turbo > 1 && Math.random() < 0.5 ? -1 : 1; parts.push({ x: car.x - cs * 46 + sn * 10 * sd, y: car.y - sn * 46 - cs * 10 * sd - 9, vx: -cs * (120 + Math.random() * 80), vy: -sn * (120 + Math.random() * 80), life: 0.16 + Math.random() * 0.14, r: 3 + Math.random() * 2.5, c: 5, s: 1 }); } // the turbo's blue flame, from both pipes when there are two
+      if (thr > 0.3) { const load = clamp(thr * (1 - sp / 460) + Math.max(0, sf) * 1.6, 0, 1); if (Math.random() < dt * (4 + 30 * load)) smoke(exx, exy, -cs * 46, -sn * 46, load); }
+      else if (car.pthr > 0.8 && sp > 240) { for (let i = 0; i < 4; i++) parts.push({ x: exx, y: exy, vx: -cs * (90 + Math.random() * 90) + (Math.random() - 0.5) * 50, vy: -sn * (90 + Math.random() * 90) + (Math.random() - 0.5) * 50, life: 0.22 + Math.random() * 0.14, r: 3 + Math.random() * 2.5, c: 3, s: 1 }); smoke(exx, exy, -cs * 60, -sn * 60, 0.8); } // the throttle snapped shut at speed: a lick of flame
+      // A slide ploughs sand out sideways from the back wheels, the way the car is sliding, in darker thrown sand that shows against the dune.
+      if (car.drift && Math.abs(l) > 45 && Math.random() < dt * Math.min(70, Math.abs(l) * 0.24) && parts.length < 190) { const sd = l > 0 ? 1 : -1, w = Math.random() < 0.5 ? 27 : -27, v = Math.abs(l) * (0.55 + Math.random() * 0.4);
+        parts.push({ x: car.x - cs * 34 - sn * w, y: car.y - sn * 34 + cs * w, vx: -sn * sd * v - cs * 90 + (Math.random() - 0.5) * 70, vy: cs * sd * v - sn * 90 + (Math.random() - 0.5) * 70, life: 0.32 + Math.random() * 0.3, r: 3.5 + Math.random() * 4.5, c: 1 }); }
       car.trk += sp * dt; if (car.trk > 13) { car.trk = 0; for (const s of [0, 1]) { const w = s ? 27 : -27, a = tracks[s]; const mx = car.x - cs * 34 - sn * w, my = car.y - sn * 34 + cs * w; a.push(mx, my); if (a.length > 520) a.splice(0, 2);
         const k = tracks[2 + s]; if (car.drift) { k.push(mx, my); if (k.length > 420) k.splice(0, 2); } else if (k.length && !isNaN(k[k.length - 1])) k.push(NaN, NaN); } }
     }
   }
+  car.pthr = thr; // last frame's throttle, to catch it being snapped shut
   if (run.chain && !car.air && !car.drift && car.twoT <= 0 && (run.chainT -= dt) <= 0) run.chain = 0; // the combo clock runs only between stunts
   if (car.air || car.roll) for (const a of tracks) if (a.length && !isNaN(a[a.length - 1])) a.push(NaN, NaN); // break the tyre marks
   // the rim of the reserve turns the buggy back
   const d = Math.hypot(car.x, car.y); run.t += dt; if (d > run.far) run.far = d; if (sp > run.maxSp) run.maxSp = sp; // for the missions: the clock, how far from the camp, top speed
-  if (d > R - 30) { const k = (d - (R - 30)) * 5 * dt; car.vx -= car.x / d * k * 60; car.vy -= car.y / d * k * 60; if (d > R + 60) { car.x *= (R + 60) / d; car.y *= (R + 60) / d; } if (edgeT <= 0) { note(T('edge'), '', 2); edgeT = 4; } }
+  { const rd = rimD(car.x, car.y); if (rd > R - 30) { const k = (rd - (R - 30)) * 5 * dt; car.vx -= (car.x - CX) / rd * k * 60; car.vy -= (car.y - CY) / rd * k * 60; if (rd > R + 60) { car.x = CX + (car.x - CX) * (R + 60) / rd; car.y = CY + (car.y - CY) * (R + 60) / rd; } if (edgeT <= 0) { note(T('edge'), '', 2); edgeT = 4; } } }
   edgeT -= dt; hitT -= dt; hintT -= dt;
   if (car.boostT > 0) { car.boostT -= dt; if (!car.roll && Math.random() < dt * 60) { const cs = Math.cos(car.ang), sn = Math.sin(car.ang); puff(car.x - cs * 46, car.y - sn * 46 - (car.z - h0) * 0.7, -cs * 220, -sn * 220, 1, false, Math.random() < 0.6 ? 3 : 2); } } // flame and smoke from the exhaust
   // the last resort: the engine has been pulling for a while and the car has not moved a car's length. Baba tows it to open sand close by.
-  if (Math.abs(thr) > 0.3 && !car.air && !car.roll) { if (Math.hypot(car.x - car.sx, car.y - car.sy) > 34) { car.sx = car.x; car.sy = car.y; car.st = 0; } else if ((car.st += dt) > 2.4) rescue(); }
+  if (Math.abs(thr) > 0.3 && !car.air && !car.roll && lockB < 0.02) { if (Math.hypot(car.x - car.sx, car.y - car.sy) > 34) { car.sx = car.x; car.sy = car.y; car.st = 0; } else if ((car.st += dt) > 2.4) rescue(); }
   else { car.sx = car.x; car.sy = car.y; car.st = 0; }
   // solid things: bump and slow down
   const bump = (o, oy) => { const dx = car.x - o.x, dy = car.y - (o.y - oy), rr = o.rad + 27, d2 = dx * dx + dy * dy; if (d2 >= rr * rr || car.air) return false;
@@ -1260,6 +1350,10 @@ function update(dt) {
     if (mx || my) { a.x += mx * dt; a.y += my * dt; a.ph += dt * (a.run > 0 ? 13 : 4.5); if (Math.abs(mx) > 2) a.dir = mx > 0 ? 1 : -1; }
     if (dc < 60) bump(a, 8);
   }
+  for (const o of CLIMB) { // the other cars keep at their climbing
+    if (o.wait > 0) o.wait -= dt; else { o.y += o.dir * (o.dir < 0 ? o.sp : 170) * dt; if (o.y <= o.y1) { o.y = o.y1; o.dir = 1; o.wait = 3 + o.sp % 3; } else if (o.y >= o.y0) { o.y = o.y0; o.dir = -1; o.wait = 2; }
+      if (Math.abs(o.x - car.x) < 700 && Math.abs(o.y - car.y) < 520 && Math.random() < dt * 9) puff(o.x, o.y + (o.dir < 0 ? 34 : -34), 0, o.dir < 0 ? 70 : -40, 1, true, 1); }
+    if (Math.abs(o.x - car.x) < 80 && Math.abs(o.y - car.y) < 80) bump(o, 0); }
   // pick-ups
   for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; if (regAt(o.x, o.y) === 5) run.rDates++; play('date', 1 + (run.dates % 8) * 0.06); spark(o.x, o.y - 6, 3); } }
   for (const o of GOLD) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick + 1200) { o.off = true; run.dates += 10; run.gold++; play('power', 1.6); buzz(30); float(o.x, o.y - 44, T('goldPlus'), '#ffe07a'); spark(o.x, o.y - 10, 16); ring(o.x, o.y, '#ffe07a'); } }
@@ -1278,12 +1372,15 @@ function update(dt) {
     // which region the car is in. Crossing into another one is announced by name. A postcard, a finished mission or a new level is left to be read first; anything slighter gives way.
     const rg = regAt(car.x, car.y); if (RW[rg] > 0.6 && rg !== run.reg) { run.reg = rg; if (!run.regs[rg]) { run.regs[rg] = 1; run.regN++; } if (!run.tut && !run.race && run.t > 2) run.regNote = rg; }
     if (run.regNote >= 0 && (noteT <= 0 || $('note').className !== 'card')) { note(T('reg')[run.regNote], 'zone', 2.6); run.regNote = -1; }
+    // over a great ridge for the first time: a prize, and word of it
+    { const z = zoneAt(car.x, car.y); if (z > save.wall && !run.tut) { for (let k = save.wall + 1; k <= z; k++) { const c = [0, 100, 300][k]; save.coins += c; note(T('crossed', T('wallName')[k - 1], c), 'card', 5); } save.wall = z; persist(); coinsUI(); play('power', 1.2); spark(car.x, car.y - 60, 26); } }
     // the big map clears round the car, and a place that comes within range goes on both maps as a question mark
     run.fogNew += uncover(car.x, car.y); const quiet = noteT <= 0 || $('note').className !== 'card';
     for (const q of SITES) if (!save.cards.includes(q.id) && !save.spot.includes(q.id) && (q.x - car.x) ** 2 + (q.y - car.y) ** 2 < SPOT_R * SPOT_R) { save.spot.push(q.id); persist(); if (quiet && !run.tut) note(T('spot'), '', 2.6); play('tek', 1.3, 1.4); }
     // Early in a free run Baba says which way the nearest place still to be found lies, so there is always somewhere to head for.
-    if (!run.rum && run.t > 1.5 && !run.tut && !run.race && (quiet || run.t > 12)) { run.rum = 1; let best = null, bd = 1e9; for (const q of SITES) if (!save.cards.includes(q.id)) { const d = Math.hypot(q.x - car.x, q.y - car.y); if (d < bd) { bd = d; best = q; } }
-      if (best && quiet) note(T('rumour', T('dir')[Math.round(Math.atan2(best.x - car.x, car.y - best.y) / (Math.PI / 4) + 8) % 8]), 'baba', 4.2); } }
+    if (!run.rum && run.t > 1.5 && !run.tut && !run.race && (quiet || run.t > 12)) { run.rum = 1; let best = null, bd = 1e9, beyond = false; for (const q of SITES) if (!save.cards.includes(q.id)) { if (!canReach(q)) { beyond = true; continue; } const d = Math.hypot(q.x - car.x, q.y - car.y); if (d < bd) { bd = d; best = q; } }
+      if (best && quiet) note(T('rumour', T('dir')[Math.round(Math.atan2(best.x - car.x, car.y - best.y) / (Math.PI / 4) + 8) % 8]), 'baba', 4.2);
+      else if (beyond && quiet) note(T('rumourWall', T('wallName')[nextGate() - 1], T('need')[nextGate() - 1]), 'baba', 5); } } // everything in reach is found: what is left lies over the next ridge
   if (run.tut) tutTick(dt);
   if (run.race) { // race: clock, ghost recording, next checkpoint. Fuel does not run down.
     run.rt += dt; run.recT -= dt; if (run.recT <= 0) { run.recT += 0.2; if (run.rec.length < 6000) run.rec.push(Math.round(car.x), Math.round(car.y), Math.round(car.ang * 100)); }
@@ -1303,8 +1400,8 @@ function update(dt) {
   car.lean += ((car.air || car.roll ? 0 : car.tside * clamp((car.tip - 0.1) / 0.9, 0, 1) * 0.62) - car.lean) * Math.min(1, dt * 10); // one side lifts as the car tips
   car.spin += (car.vx * c2 + car.vy * s2) / (12.5 * CS) * dt;
   const k = Math.min(1, dt * 4); camx += (car.x + car.vx * 0.3 - camx) * k; camy += (car.y + car.vy * 0.3 - (car.z - h0) * 0.4 - camy) * k; // and up with a high jump, so the car stays in the picture
-  camZ += (1 - 0.2 * sstep(150, 430, sp) - 0.08 * clamp((car.z - h0) / 150, 0, 1) - camZ) * Math.min(1, dt * 2.2); // pull back at speed and on a big jump, so there is more to see ahead
-  engine(sp, thr);
+  camZ += (1 - 0.2 * sstep(150, 430, sp) - 0.08 * clamp((car.z - h0) / 150, 0, 1) - 0.42 * sstep(110, 600, h0) - camZ) * Math.min(1, dt * 2.2); // pull back at speed and on a big jump, so there is more to see ahead
+  engine(sp, thr + (car.tbOn ? 0.5 : 0));
 }
 
 // ---------- drawing a frame ----------
@@ -1359,7 +1456,7 @@ function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under 
   s = SAB;
   if (s.x > x0 - s.r && s.x < x1 + s.r && s.y > y0 - s.r && s.y < y1 + s.r) { // salt crust cracks
     c.strokeStyle = 'rgba(120,96,70,.35)'; c.lineWidth = 1.4; c.beginPath();
-    for (let k = 0; k < 150; k++) { const a = hash2(k, 5) * TAU, d = Math.sqrt(hash2(k, 9)) * s.r * 0.72, x = s.x + Math.cos(a) * d, y = s.y + Math.sin(a) * d, b = hash2(k, 3) * TAU; if (x < x0 - 50 || x > x1 + 50 || y < y0 - 50 || y > y1 + 50) continue;
+    for (let k = 0; k < 60; k++) { const a = hash2(k, 5) * TAU, d = Math.sqrt(hash2(k, 9)) * s.r * 0.72, x = s.x + Math.cos(a) * d, y = s.y + Math.sin(a) * d, b = hash2(k, 3) * TAU; if (x < x0 - 50 || x > x1 + 50 || y < y0 - 50 || y > y1 + 50) continue;
       c.moveTo(x, y); c.lineTo(x + Math.cos(b) * 26, y + Math.sin(b) * 26); c.lineTo(x + Math.cos(b) * 26 + Math.cos(b + 1.1) * 20, y + Math.sin(b) * 26 + Math.sin(b + 1.1) * 20); c.moveTo(x, y); c.lineTo(x + Math.cos(b + 2.2) * 22, y + Math.sin(b + 2.2) * 22); }
     c.stroke();
   }
@@ -1380,7 +1477,7 @@ function decals(c, x0, y0, x1, y1) { // flat things painted on the ground under 
   }
   s = site('camp');
   if (s.x > x0 - 200 && s.x < x1 + 200 && s.y > y0 - 200 && s.y < y1 + 200) { // the sadu rug in front of the tent
-    c.save(); c.translate(s.x, s.y - 20); c.fillStyle = SHEMAGH; c.strokeStyle = INK; c.lineWidth = 1.6; c.beginPath(); c.roundRect(-56, -22, 112, 44, 4); c.fill(); c.stroke();
+    c.save(); c.translate(s.x - 120, s.y + 200); c.fillStyle = SHEMAGH; c.strokeStyle = INK; c.lineWidth = 1.6; c.beginPath(); c.roundRect(-56, -22, 112, 44, 4); c.fill(); c.stroke();
     c.fillStyle = '#2f2622'; c.fillRect(-56, -14, 112, 5); c.fillRect(-56, 9, 112, 5); c.fillStyle = '#fffaf0'; for (let i = -50; i < 50; i += 12) { c.beginPath(); c.moveTo(i, 4); c.lineTo(i + 6, -4); c.lineTo(i + 12, 4); c.closePath(); c.fill(); } c.restore();
   }
 }
@@ -1426,7 +1523,7 @@ function render(dt) {
   // standing things and the buggy, sorted so nearer ones overlap farther ones
   draws.length = 0;
   for (const p of PROPS) if (!p.hide && inView(p.x, p.y, 130)) draws.push(p);
-  for (const a of ANIMALS) if (inView(a.x, a.y, 90)) draws.push(a);
+  for (const a of ANIMALS) if (inView(a.x, a.y, 90)) draws.push(a); for (const o of CLIMB) if (inView(o.x, o.y, 90)) draws.push(o);
   for (const o of RAMPS) if (inView(o.x, o.y, 90)) draws.push(o); for (const o of HOOPS) if (inView(o.x, o.y, 150)) draws.push(o);
   if (racing && run.ghost && run.cd <= 0) { // the ghost of your best run in this race
     const g = run.ghost, u = run.rt / 0.2, i = Math.floor(u) * 3, f = u % 1;
@@ -1435,12 +1532,14 @@ function render(dt) {
   draws.push(car); draws.sort((a, b) => (a.kind === 'ramp' ? a.y - 44 : a.y) - (b.kind === 'ramp' ? b.y - 44 : b.y)); // a ramp lies flat, so anything on it is drawn over it
   for (const o of draws) {
     if (o === car) { drawCar(c); continue; } if (o.kind === 'ramp') { drawRamp(c, o); continue; } if (o.kind === 'hoop') { drawHoop(c, o); continue; }
+    if (o.kind === 'npc') { drawCar3D(c, o.x, o.y, 1, { ang: o.dir < 0 ? -Math.PI / 2 : Math.PI / 2, speed: o.wait > 0 ? 0 : 120, spin: o.wait > 0 ? 0 : t * 7, t, col: o.col, truck: o.truck }); continue; }
     const e = o.hx !== undefined ? spr(o.kind, (o.ph | 0) % 4) : spr(o.kind);
     c.fillStyle = 'rgba(60,30,15,.2)'; c.beginPath(); c.ellipse(o.x + e.w * 0.06, o.y + 1, e.w * 0.34, Math.min(9, e.w * 0.08), 0, 0, TAU); c.fill();
     blit(c, e, o.x, o.y, o.hx !== undefined ? o.dir < 0 : o.flip);
   }
   for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i, 1); continue; } p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94;
-    c.fillStyle = 'rgba(' + PCOL[p.c || 0] + ',' + Math.min(p.s ? 1 : 0.6, p.life * (p.s ? 3 : 1)) + ')'; c.beginPath(); c.arc(p.x, p.y, p.s ? p.r * Math.min(1, p.life * 2.5) : p.r * (1.4 - p.life), 0, TAU); c.fill(); }
+    if (p.up) p.y -= p.up * dt;
+    c.fillStyle = 'rgba(' + PCOL[p.c || 0] + ',' + Math.min(p.a || (p.s ? 1 : 0.6), p.life * (p.s ? 3 : 1)) + ')'; c.beginPath(); c.arc(p.x, p.y, p.s ? p.r * Math.min(1, p.life * 2.5) : p.r * (1.4 - p.life), 0, TAU); c.fill(); }
   if (st === 'play' && (car.boostT > 0 || Math.hypot(car.vx, car.vy) > 440)) { // streaks of air past the car when it is really moving
     const v = Math.hypot(car.vx, car.vy) || 1, ux = car.vx / v, uy = car.vy / v; c.strokeStyle = 'rgba(255,250,240,.22)'; c.lineWidth = 3; c.beginPath();
     for (let i = 0; i < 7; i++) { const px = camx + (Math.random() - 0.5) * hw * 1.8, py = camy + (Math.random() - 0.5) * hh * 1.8, l = 50 + Math.random() * 90; c.moveTo(px, py); c.lineTo(px - ux * l, py - uy * l); } c.stroke(); }
@@ -1454,6 +1553,7 @@ function render(dt) {
       c.setTransform(u, 0, 0, u, ax, ay); c.rotate(a); c.fillStyle = goal ? '#1f7a74' : SHEMAGH; c.strokeStyle = '#fffaf0'; c.lineWidth = 3; c.lineJoin = 'round'; c.beginPath(); c.moveTo(24, 0); c.lineTo(-12, -16); c.lineTo(-4, 0); c.lineTo(-12, 16); c.closePath(); c.fill(); c.stroke();
       c.setTransform(u, 0, 0, u, ax - Math.cos(a) * 34, ay - Math.sin(a) * 34); c.font = '800 15px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 4; c.strokeStyle = INK; c.strokeText(nf(d / 8), 0, 0); c.fillStyle = '#fffaf0'; c.fillText(nf(d / 8), 0, 0); c.textBaseline = 'alphabetic'; }
   }
+  if (st === 'play') { const hh = H(car.x, car.y); if (hh > 150) { const tx = T('alt', Math.round(hh / 3)); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.font = '800 20px "Baloo Bhaijaan 2", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 4; c.strokeStyle = INK; c.globalAlpha = sstep(150, 230, hh); c.strokeText(tx, W / dpr / 2, 112); c.fillStyle = '#fffaf0'; c.fillText(tx, W / dpr / 2, 112); c.globalAlpha = 1; c.textBaseline = 'alphabetic'; } } // how high the car stands, in metres, once it is up on a mountain
   if (joy.on && st === 'play') { // the pad under the finger: the inner ring is driving, the outer ring is where pressing hard begins
     c.setTransform(dpr, 0, 0, dpr, 0, 0); const dx = joy.x - joy.ox, dy = joy.y - joy.oy, m = Math.hypot(dx, dy) || 1, k = Math.min(1, HARD_R * 1.12 / m), hard = joy.hard;
     c.strokeStyle = 'rgba(255,250,240,.7)'; c.lineWidth = 3; c.beginPath(); c.arc(joy.ox, joy.oy, JOY_R, 0, TAU); c.stroke();
@@ -1466,16 +1566,16 @@ function fogPaint() { // the haze as a small picture, one dot a square, redrawn 
   if (fogShown === fogAll) return; fogShown = fogAll; const g = fogCv.getContext('2d'), img = g.createImageData(FOG_N, FOG_N), d = img.data;
   for (let p = 0; p < FOG.length; p++) { d[p * 4] = 226; d[p * 4 + 1] = 206; d[p * 4 + 2] = 170; d[p * 4 + 3] = FOG[p] ? 0 : 226; } g.putImageData(img, 0, 0);
 }
-const RADAR = 2600; // how far the round map in the corner sees, each way from the car
+const RADAR = 3400; // how far the round map in the corner sees, each way from the car
 function drawMap(cnv, big) { // big: the whole reserve, for the map sheet. Otherwise the round map: north up, the car in the middle
-  const g = cnv.getContext('2d'), S = cnv.width, u = S / 264, live = st === 'play' || st === 'pause', cx = big ? 0 : car.x, cy = big ? 0 : car.y;
+  const g = cnv.getContext('2d'), S = cnv.width, u = S / 264, live = st === 'play' || st === 'pause', cx = big ? CX : car.x, cy = big ? CY : car.y;
   const k = S / (big ? 2 * R * 1.04 : 2 * RADAR), px = x => S / 2 + (x - cx) * k, py = y => S / 2 + (y - cy) * k, e = k * 2 * R * 1.04 / MS, lim = S / 2 - 9 * u;
   const seen = (x, y) => big || (Math.abs(x - cx) < RADAR && Math.abs(y - cy) < RADAR);
   const rim = (x, y) => { const dx = (x - cx) * k, dy = (y - cy) * k, d = Math.hypot(dx, dy); return d > lim ? [S / 2 + dx / d * lim, S / 2 + dy / d * lim, 1] : [S / 2 + dx, S / 2 + dy, 0]; }; // a far-off thing is pinned to the edge of the round map, in its direction
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S); if (!big) { g.fillStyle = '#785442'; g.fillRect(0, 0, S, S); } g.imageSmoothingEnabled = true;
-  g.setTransform(e, 0, 0, e, px(-R * 1.04), py(-R * 1.04)); g.drawImage(miniBase, 0, 0); g.setTransform(1, 0, 0, 1, 0, 0);
-  if (big) { fogPaint(); g.save(); g.beginPath(); g.arc(px(0), py(0), R * k, 0, TAU); g.clip(); g.drawImage(fogCv, px(-FOG_O), py(-FOG_O), 2 * FOG_O * k, 2 * FOG_O * k); g.restore(); } // the haze over what has not been driven yet, soft at its edges
-  g.strokeStyle = INK; g.lineWidth = 2 * u; g.beginPath(); g.arc(px(0), py(0), R * k, 0, TAU); g.stroke();
+  g.setTransform(e, 0, 0, e, px(CX - R * 1.04), py(CY - R * 1.04)); g.drawImage(miniBase, 0, 0); g.setTransform(1, 0, 0, 1, 0, 0);
+  if (big) { fogPaint(); g.save(); g.beginPath(); g.arc(px(CX), py(CY), R * k, 0, TAU); g.clip(); g.drawImage(fogCv, px(CX - FOG_O), py(CY - FOG_O), 2 * FOG_O * k, 2 * FOG_O * k); g.restore(); } // the haze over what has not been driven yet, soft at its edges
+  g.strokeStyle = INK; g.lineWidth = 2 * u; g.beginPath(); g.arc(px(CX), py(CY), R * k, 0, TAU); g.stroke();
   g.fillStyle = '#fffaf0'; g.strokeStyle = INK; g.lineWidth = u; const ra = big ? 0.8 * u : u, shown = (x, y) => seen(x, y) && (!big || fogAt(x, y)); // on the big map, ramps and golden dates show only where the haze has cleared
   for (const o of RAMPS) if (shown(o.x, o.y)) { g.save(); g.translate(px(o.x), py(o.y)); g.rotate(o.a); g.beginPath(); g.moveTo(4.5 * ra, 0); g.lineTo(-3 * ra, -3.4 * ra); g.lineTo(-3 * ra, 3.4 * ra); g.closePath(); g.fill(); g.stroke(); g.restore(); } // ramps, pointing the way they throw
   if (live) { let best = null, bd = 1e9, any = false; g.fillStyle = SHEMAGH; g.strokeStyle = '#fffaf0'; g.lineWidth = 1.2 * u;
@@ -1488,7 +1588,8 @@ function drawMap(cnv, big) { // big: the whole reserve, for the map sheet. Other
     g.fillStyle = on ? '#fffaf0' : INK; g.fillText(!on ? '?' : big ? String(i + 1) : '', q[0], q[1] + 0.5 * u);
     if (live && on && REST[s.id] && !run.rest[s.id] && !run.race) { g.fillStyle = SHEMAGH; g.strokeStyle = '#fffaf0'; g.lineWidth = 1.2 * u; g.beginPath(); g.arc(q[0] + r * 0.8, q[1] - r * 0.8, 3.2 * u, 0, TAU); g.fill(); g.stroke(); } }); // a red dot: this place can still fill the tank
   if (big) { const names = T('reg'); g.font = `800 ${Math.round(8 * u)}px "Baloo Bhaijaan 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; // the five regions by name, each in the middle of its slice
-    [[350, 5600], [65, 5000], [155, 5000], [230, 5000], [300, 5200]].forEach(([b, d], i) => { const a = b * Math.PI / 180, x = px(Math.sin(a) * d), y = py(-Math.cos(a) * d); g.lineWidth = 3 * u; g.strokeStyle = 'rgba(255,250,240,.8)'; g.strokeText(names[i + 1], x, y); g.fillStyle = INK; g.fillText(names[i + 1], x, y); }); }
+    [[6500, -4700], [5600, -14800], [-5000, -16300], [600, -6700], [-6400, -4700]].forEach(([wx, wy], i) => { const x = px(wx), y = py(wy); g.lineWidth = 3 * u; g.strokeStyle = 'rgba(255,250,240,.8)'; g.strokeText(names[i + 1], x, y); g.fillStyle = INK; g.fillText(names[i + 1], x, y); });
+    T('wallMap').forEach((nm, i) => { const x = px(-200), y = py(RNG[i].y + 150); g.lineWidth = 3 * u; g.strokeStyle = 'rgba(43,26,18,.75)'; g.strokeText(nm, x, y); g.fillStyle = '#fffaf0'; g.fillText(nm, x, y); }); } // and the two 'arqoubs, in white
   if (run.race && live && run.ri < run.race.pts.length) { // the race route still to drive
     g.strokeStyle = '#fffaf0'; g.lineWidth = 2.2 * u; g.setLineDash([5 * u, 4 * u]); g.beginPath(); g.moveTo(px(car.x), py(car.y)); for (let i = run.ri; i < run.race.pts.length; i++) { const q = site(run.race.pts[i]); g.lineTo(px(q.x), py(q.y)); } g.stroke(); g.setLineDash([]);
     const q = site(run.race.pts[run.ri]), w = big ? [px(q.x), py(q.y)] : rim(q.x, q.y); g.strokeStyle = SHEMAGH; g.lineWidth = 3 * u; g.beginPath(); g.arc(w[0], w[1], (9 + Math.sin(t * 6) * 2) * u, 0, TAU); g.stroke();
@@ -1541,7 +1642,7 @@ function showMenu() {
 }
 function startRun(rc, lesson) { // rc: a race to drive, or nothing for a free safari. lesson: give the first lesson again, asked for from How to play
   unlockAudio(); st = 'play'; newDay(); resetCar(); resetWorld();
-  const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl });
+  const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl, turbo: u.turbo, drag: 1 + 0.02 * u.engine }); // drag: a stronger engine is mostly pull, for climbing and getting away; top speed rises with it only half as fast
   Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0, reg: 0, regs: { 0: 1 }, regN: 1, regNote: -1, rDist: 0, rAir: 0, rDrift: 0, rDates: 0, fogNew: 0, rum: 0, rest: {},
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc ? ghosts[raceKey(rc)] : null, done: null }); run.fuel = run.max;
   run.tut = !rc && (lesson || !save.tut) ? { i: 0, ok: 0, d0: 0, r0: 0, f0: 0 } : null; tutKey = ''; show('tut', !!run.tut); if (run.tut) tutHud(0, 0);
@@ -1573,7 +1674,7 @@ async function endRun(early) {
   $('swPartS').textContent = T('partS', run.dates, cS); $('swPartD').textContent = T('partD', m, cD); $('swPartA').textContent = T('partA', run.stunt, cA);
   const extra = []; if (dn && dn.gain) extra.push(T('overMedal', dn.gain)); if (dn && dn.isBest) extra.push(T('overBestTime')); if (run.mdone) extra.push(T('overMis', run.mdone, run.mcoins)); if (run.combo > 1) extra.push(T('overCombo', run.combo)); if (run.lvlUp) extra.push(T('overLvl', run.lvlUp));
   if (run.cards.length) extra.push(T('overCards', run.cards.map(id => T('s_' + id)).join(getLang() === 'ar' ? '، ' : ', ')));
-  rankRow($('overRank')); if (nextUnlock()) extra.push(nextUnlock());
+  rankRow($('overRank')); if (wallGoal()) extra.push(wallGoal()); if (nextUnlock()) extra.push(nextUnlock());
   const oc = $('overCards'); oc.hidden = !extra.length; oc.textContent = extra.join(' · ');
   const ic = $('swDateIc').getContext('2d'); ic.setTransform(1, 0, 0, 1, 0, 0); ic.clearRect(0, 0, 64, 64); ic.setTransform(2.6, 0, 0, 2.6, 32, 34); aDate(ic);
   coinsUI(); show('over', true);
@@ -1599,7 +1700,7 @@ function openSheet(id) {
     for (const s of SITES) { const on = save.cards.includes(s.id), card = el('div', 'card' + (on ? '' : ' locked')), cn = mk(192, 192); siteIcon(cn, s.id); card.append(cn, el('b', '', on ? T('s_' + s.id) : T('unknown')), el('small', '', `+${s.coins}`)); grid.append(card); }
     body.append(grid);
   } else if (id === 'garage') {
-    body.append(el('p', 'label', T('garageNote')), el('p', 'label', T('trTitle'))); const tg = el('div', 'cards'), mineT = COLORS[save.color] || COLORS.white;
+    if (wallGoal()) body.append(el('p', 'hint goal', wallGoal())); body.append(el('p', 'label', T('garageNote')), el('p', 'label', T('trTitle'))); const tg = el('div', 'cards'), mineT = COLORS[save.color] || COLORS.white;
     for (const [tid, tk] of Object.entries(TRUCKS)) { // four trucks, opened by level and then bought
       const own = save.trucks.includes(tid), on = save.truck === tid, locked = !own && save.lvl < tk.lvl, card = el('div', 'card' + (on ? ' on' : '') + (locked ? ' locked' : '')), cn = mk(192, 192), g = cn.getContext('2d');
       g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); drawCar3D(g, 94, 160, tid === 'monster' ? 1.02 : 1.12, { ang: 0.95, steer: 0.5, speed: 90, t: 1, col: mineT, truck: tid });
@@ -1615,14 +1716,15 @@ function openSheet(id) {
       card.append(cn, el('b', '', T('c_' + cid)), el('small', '', col.cost ? nf(col.cost) : T('free')), btn); grid.append(card);
     }
     body.append(grid, el('p', 'label', T('upTitle'))); const ug = el('div', 'cards'), mine = COLORS[save.color] || COLORS.white;
-    for (const uid of UPS) { // five upgrades, five levels each
+    for (const uid of UPS) { // six upgrades
       const lv = save.up[uid], card = el('div', 'card'), cn = mk(192, 192), g = cn.getContext('2d'); g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192);
       if (uid === 'tank') { g.setTransform(5, 0, 0, 5, 96, 168); aCan(g); }
       else if (uid === 'magnet') { for (const [x, y, k] of [[60, 120, 4], [112, 86, 5.5], [140, 140, 3.4]]) { g.setTransform(k, 0, 0, k, x, y); aDate(g); } }
-      else drawCar3D(g, 92, 158, 1.18, Object.assign({ t: 1, col: mine, truck: save.truck }, uid === 'engine' ? { ang: 0.25, speed: 320 } : uid === 'tyres' ? { ang: 1.25, steer: 1, speed: 60 } : { ang: 0.6, rol: 0.42, speed: 60 }));
-      const maxed = lv >= 5, btn = el('button', '', maxed ? T('upMax') : T('buy', UP_COST[lv])); btn.type = 'button'; btn.disabled = maxed;
-      btn.onclick = () => { const cost = UP_COST[save.up[uid]]; if (save.coins < cost) return note(T('notEnough')); save.coins -= cost; save.up[uid]++; persist(); coinsUI(); note(T('bought')); play('power'); openSheet('garage'); };
-      const pips = el('span', 'pips'); for (let i = 0; i < 5; i++) pips.append(el('i', i < lv ? 'on' : ''));
+      else drawCar3D(g, 92, 158, 1.18, Object.assign({ t: 1, col: mine, truck: save.truck }, uid === 'engine' || uid === 'turbo' ? { ang: 0.25, speed: 320 } : uid === 'tyres' ? { ang: 1.25, steer: 1, speed: 60 } : { ang: 0.6, rol: 0.42, speed: 60 }));
+      if (uid === 'turbo') { g.setTransform(1, 0, 0, 1, 0, 0); for (const [x, y, k] of [[34, 124, 1], [22, 142, 0.8]]) { g.fillStyle = 'rgba(150,214,255,.9)'; g.strokeStyle = INK; g.lineWidth = 1.6; g.beginPath(); g.moveTo(x + 22 * k, y - 7 * k); g.quadraticCurveTo(x, y - 12 * k, x - 22 * k, y + 2 * k); g.quadraticCurveTo(x + 2 * k, y + 9 * k, x + 22 * k, y + 5 * k); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#fffaf0'; g.beginPath(); g.ellipse(x + 10 * k, y - 1 * k, 9 * k, 3.5 * k, -0.15, 0, TAU); g.fill(); } }
+      const maxed = lv >= upMax(uid), btn = el('button', '', maxed ? T('upMax') : T('buy', upCost(uid, lv))); btn.type = 'button'; btn.disabled = maxed;
+      btn.onclick = () => { const cost = upCost(uid, save.up[uid]); if (save.coins < cost) return note(T('notEnough')); save.coins -= cost; save.up[uid]++; persist(); coinsUI(); note(T('bought')); play('power'); openSheet('garage'); };
+      const pips = el('span', 'pips'); for (let i = 0; i < upMax(uid); i++) pips.append(el('i', i < lv ? 'on' : ''));
       card.append(cn, el('b', '', T('u_' + uid)), el('small', '', T('ud_' + uid)), pips, btn); ug.append(card);
     }
     body.append(ug);
@@ -1641,10 +1743,10 @@ function openSheet(id) {
     body.append(el('p', 'hint', T('misNote', save.streak)));
   } else if (id === 'races') {
     body.append(el('p', 'label', T('raceNote')));
-    for (const rc of [dailyRace(), ...RACES]) { const key = raceKey(rc), tg = raceTargets(rc), med = save.medals[key] || 0, best = save.times[key], locked = save.lvl < rc.lvl, row = el('div', 'rrow' + (rc.id === 'daily' ? ' daily' : ''));
+    for (const rc of [dailyRace(), ...RACES]) { const key = raceKey(rc), tg = raceTargets(rc), med = save.medals[key] || 0, best = save.times[key], shut = !raceOpen(rc), locked = save.lvl < rc.lvl || shut, row = el('div', 'rrow' + (rc.id === 'daily' ? ' daily' : ''));
       const info = el('div', 'rinfo'), tm = el('div', 'rtimes'); info.append(el('b', '', T('r_' + rc.id)), el('small', '', rc.pts.map(id => save.cards.includes(id) ? T('s_' + id) : T('unknown')).join(getLang() === 'ar' ? ' ← ' : ' → ')));
       tg.forEach((sec, i) => { const sp = el('span', 'md m' + (i + 1) + (med > i ? ' on' : '')); sp.append(el('i'), el('span', '', fmtTime(sec))); tm.append(sp); }); if (best) tm.append(el('span', 'best', T('bestTime', fmtTime(best)))); info.append(tm);
-      const btn = el('button', 'btn', locked ? T('locked', rc.lvl) : T('raceGo')); btn.type = 'button'; btn.disabled = locked; btn.onclick = () => startRun(rc); row.append(info, btn); body.append(row); }
+      const btn = el('button', 'btn', save.lvl < rc.lvl ? T('locked', rc.lvl) : shut ? T('raceNeed') : T('raceGo')); btn.type = 'button'; btn.disabled = locked; btn.onclick = () => startRun(rc); row.append(info, btn); body.append(row); }
   } else { const ol = el('ol', 'help-list'); for (const line of T('help')) ol.append(el('li', '', line));
     if (st === 'menu') { const again = el('button', 'ghost again', T('tutAgain')); again.type = 'button'; again.onclick = () => { closeSheet(); startRun(null, true); }; body.append(again); } // Baba's first lesson, for anyone who wants it again
     // one line for support: the version, where it is running, and what the screen has reported (touches started / moved / cancelled, pointers down / cancelled, focus lost)
@@ -1699,7 +1801,7 @@ const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); tutKey = ''; coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, region, regAt, RW, REG, ANIMALS, FOG, uncover, fogAt, fogPct, persist, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, region, regAt, RW, REG, ANIMALS, FOG, uncover, fogAt, fogPct, persist, parts, zoneAt, ridgeT, WT, WH, RNG, CX, CY, rimD, gateOK, gateMax, lockAt, raceOpen, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
