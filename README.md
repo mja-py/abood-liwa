@@ -12,13 +12,14 @@ A free-roam dune safari for the browser, and a sister game to *Run, Abood!* and 
 - **Dunes** are real ones in cross-section: a long gentle windward ramp that is still climbing at the crest, a sharp crest that catches the light, and a short dark slip face. They all face downwind. Build speed up the ramp and the car flies off the crest; coming the other way, the engine pulls 60% harder uphill and drops into low gear at a crawl, so the car charges the slip face, throws a tail of sand, and has speed left to hop the crest. The steepest faces on Tal Moreeb can still stop it; stall there and Baba says so.
 - **Rolling:** driving across a steep slope, or landing sideways, rolls the car. It tumbles downhill, costs fuel, and Baba has something to say.
 - **Never stuck:** under power the car pivots even at a standstill, so a nose against a tent or a palm can always turn away. If it still has not moved a car's length in two and a half seconds of throttle, Baba tows it to open sand close by.
-- **The car shows what it is doing:** grey exhaust smoke that thickens when the engine works hard, a lick of flame when the throttle is snapped shut at speed, dark sand thrown out sideways in a drift, a tail of sand on a climb, and a blue flame when the turbo is on.
+- **The car shows what it is doing:** grey exhaust smoke that thickens when the engine works hard, sand thrown from both back wheels whenever the foot is down, a burst of sand and smoke when the throttle is stamped on, a lick of flame when it is snapped shut at speed, dark sand thrown out sideways in a drift, and a blue flame when the turbo is on.
+- **And says it:** the engine has gears, with the revs climbing through each and dropping at the change; under it runs the hiss of sand beneath the tyres, louder in a slide; a turbo whistles as it winds up and sighs when the throttle is let go; the exhaust pops on a lift. All of it is made in code, with no sound files.
 - **Dates** turn into dirhams at the end of the run. A **red jerrycan** tops up the fuel.
 - **The run ends** when the fuel runs out.
 
 ## The map
 
-The reserve is a great round of sand 21 km of pixels across, ringed by red flags. The camp is not in the middle but near the southern edge, because the game is a journey north: three areas lie one beyond the other, with a dune the size of a mountain between each, and Tal Moreeb at the far northern end. Driven flat out in a fully upgraded car, the camp to the top of Tal Moreeb takes about 45 seconds; getting the car that can do it takes hours.
+The reserve is a great round of sand 32 km of pixels across, ringed by red flags. The camp is not in the middle but near the southern edge, because the game is a journey north: three areas lie one beyond the other, with a dune the size of a mountain between each, and Tal Moreeb at the far northern end. From the camp to the top of Tal Moreeb is 25,700 pixels and three long climbs; getting the car that can do it takes hours.
 
 ### The great dunes: what the game is for
 
@@ -26,19 +27,20 @@ Two 'arqoubs (great dunes, العرقوب) lie right across the reserve from rim
 
 | Step | What it opens | What the car needs |
 |---|---|---|
-| Start | Home sands: the camp and the old well, 22% of the reserve | Nothing |
-| The first great dune (650 high, a climb 1,700 pixels long) | The second area: 9 places, 48% of the reserve | Engine level 3 |
-| The second great dune (950 high, a climb 2,000 pixels long) | The third area: 6 places, 31% of the reserve | Engine level 5 and a turbo |
-| The top of Tal Moreeb (1,500 high) | The last postcard, worth 300 dirhams, and the hill climb race | Engine level 5 and twin turbo |
+| Start | Home sands: the camp and the old well, 14% of the reserve | Nothing |
+| The first great dune (800 high, a climb 2,300 pixels long) | The second area: 9 places, 51% of the reserve | Engine level 3 |
+| The second great dune (1,150 high, a climb 2,800 pixels long) | The third area: 6 places, 35% of the reserve | Engine level 5 and a turbo |
+| The top of Tal Moreeb (1,800 high) | The last postcard, worth 300 dirhams, and the hill climb race | Engine level 5 and twin turbo |
 
-- **A climb takes time.** The sand lets a car that is ready go up a face at about 125 pixels a second, faster with more engine than the dune asks for and with the turbo on: 10 to 15 seconds for a car that has just what it needs.
+- **A climb takes time.** The sand lets a car that is ready go up a face at about 125 pixels a second, faster with more engine than the dune asks for, with the Low gear upgrade and with the turbo on: 15 to 20 seconds for a car that has just what it needs.
+- **The crest is a knife, and the far side drops away at once.** The face gets steeper all the way up and is still climbing at the top; beyond it the sand falls far more steeply than it rose. How the car arrives decides what happens: eased over under 205 pixels a second it tips into the drop and slides down on its wheels, for 70 stunt points; flat out it flies off the top and comes down tumbling. A car with just the engine the dune needs can hold the throttle down. A stronger one, or one with the turbo on, has to lift before the top.
 - **A car that is not ready** climbs the lower part of the face, then the sand takes its speed away and it slides back. Baba says what the dune needs, and the garage and the results card show it too. No run-up, boost strip or jump gets over.
 - **They read as mountains from above:** contour lines every 120 of height, tyre tracks running straight up the faces, the view pulling right back as the car gains height so that it is small on a vast slope, a readout of how high it stands, and other cars crawling up the same face and coming back down.
 - **Crossing a great dune for the first time** pays 100 dirhams for the first and 300 for the second.
 - **The turbo** is a sixth upgrade in two steps, single (2,500 dirhams) then twin (6,000). It comes on after about a second at full throttle, with a blue flame, and gives up to 18% more pull for each turbo: all of it for climbing and getting away, a fifth of it at top speed.
 - **The engine** costs 150, 400, 900, 1,600 and 2,600 dirhams a level. It is mostly pulling power: top speed rises with it only half as fast.
 - **Everything follows what can be reached:** Baba's hints, missions, the race of the day and the fixed races only use places in areas the car can get to. Jerrycans and golden dates are never placed on a great dune.
-- **Pace:** a bot that never stops and buys only what the dunes need climbed the first after 2 runs, the second after 10, and reached the summit on run 18, two hours of play.
+- **Pace:** a bot that never stops and buys only what the dunes need climbed the first after 2 runs, the second after 9, and reached the summit on run 24, two hours and twenty minutes of play. It never eases off for a crest, so it tumbles at every one.
 - `RNG`, `GATES` and `lockAt()` in `js/game.js` hold the shapes and the rules.
 
 ### Regions
@@ -58,18 +60,18 @@ One function, `region()` in `js/game.js`, says how much of each region a point i
 
 ### The two maps
 
-- **The round map** in the top corner during a run shows the sand around the car, north up, 3.4 km each way: the dunes, the car as a red arrow in the middle, jerrycans as red dots, golden dates as yellow dots, ramps as white arrows, and any place in range. The camp never leaves it: when it is out of range it sits on the edge, in its direction. So does the nearest jerrycan when none is in sight, and the next checkpoint in a race.
+- **The round map** in the top corner during a run shows the sand around the car, north up, 4.2 km each way: the dunes, the car as a red arrow in the middle, jerrycans as red dots, golden dates as yellow dots, ramps as white arrows, and any place in range. The camp never leaves it: when it is out of range it sits on the edge, in its direction. So does the nearest jerrycan when none is in sight, and the next checkpoint in a race.
 - **The big map** (tap the round one) shows the whole reserve, with the share uncovered and the places found written beside it.
 
 ### Discovery
 
 Nothing but the camp is on the maps to begin with; the reserve has to be explored.
 
-- **The haze:** the big map starts covered and clears for good wherever the car has been, about 600 pixels to each side. The names of the regions and the great dunes show through it, and so do the jerrycans. Ramps and golden dates show only where it has cleared.
-- **Places:** a place is on neither map until the car comes within 1.5 km of it. Then a note says something is out there and it appears on both maps as a question mark. Reaching it gives the postcard and its name.
+- **The haze:** the big map starts covered and clears for good wherever the car has been, about 800 pixels to each side. The names of the regions and the great dunes show through it, and so do the jerrycans. Ramps and golden dates show only where it has cleared.
+- **Places:** a place is on neither map until the car comes within 1.9 km of it. Then a note says something is out there and it appears on both maps as a question mark. Reaching it gives the postcard and its name.
 - **Baba's hint:** a few seconds into every free run, Baba says which way the nearest unfound place lies. When everything in reach is found, he says what the next great dune needs.
 - **Missions never name a place that has not been found.**
-- **Kept in the save:** the uncovered map is a 56 by 56 grid, half a kilobyte of text.
+- **Kept in the save:** the uncovered map is a 60 by 60 grid, 600 characters of text.
 
 ### Places
 
@@ -102,13 +104,13 @@ Camels and oryx wander near home and trot away from a fast car.
 
 Between the places the sand is a playground:
 
-- **Big dunes:** sixteen hills without a name, 120 to 170 high: four at home, eight in the second area, four in the third. They are hills beside the great dunes, which are mountains.
-- **Ramps:** 120 wooden kickers, each turned to face the longest drop near it, with a clear run-up and a clear landing. Drive up one the way its arrows point and it throws the car; the faster in, the higher out. The first is a short drive from the camp.
+- **Big dunes:** twenty-five hills without a name, 120 to 170 high: six at home, twelve in the second area, seven in the third. They are hills beside the great dunes, which are mountains.
+- **Ramps:** 220 wooden kickers, each turned to face the longest drop near it, with a clear run-up and a clear landing. Drive up one the way its arrows point and it throws the car; the faster in, the higher out. The first is a short drive from the camp.
 - **Hoops:** every second ramp has a red and white hoop to fly through, worth 120 stunt points once a run.
-- **Boost strips:** about 90 strips of arrows on the sand give a shove the way they point. Some sit on the run-up to a ramp, so strip, ramp and hoop make one line.
-- **Golden dates:** worth ten dates each. One sits on top of each big dune, and fourteen more move to new places every day.
-- **Fuel:** 14 jerrycans in the whole reserve (3 at home, 6 in the second area, 5 in the third), well apart, so fuel has to be looked for on the map, and the four fuel stops.
-- **Today's sand:** the 460 lines of dates and 13 of the 14 jerrycans are placed from the date, so every day is a different map to learn, and everyone playing that day has the same one. The trail of six dates out of the camp, the first jerrycan, and every ramp, hoop and boost strip stay where they are. If the game is left open past midnight the new day is dealt between runs, never during one.
+- **Boost strips:** about 160 strips of arrows on the sand give a shove the way they point. Some sit on the run-up to a ramp, so strip, ramp and hoop make one line.
+- **Golden dates:** worth ten dates each. One sits on top of each big dune, and twenty-two more move to new places every day.
+- **Fuel:** 21 jerrycans in the whole reserve (4 at home, 9 in the second area, 8 in the third), well apart, so fuel has to be looked for on the map, and the four fuel stops.
+- **Today's sand:** the 900 lines of dates and 20 of the 21 jerrycans are placed from the date, so every day is a different map to learn, and everyone playing that day has the same one. The trail of six dates out of the camp, the first jerrycan, and every ramp, hoop and boost strip stay where they are. If the game is left open past midnight the new day is dealt between runs, never during one.
 
 ## Stunts
 
@@ -127,8 +129,9 @@ What keeps a run worth starting once every postcard is found:
 - **Harder with level:** targets grow with your level up to a cap; each mission is one, two or three stars, and three-star missions go from about 1 in 12 at level 1 to nearly half from level 14 (an easy one is set as if two levels lower, a hard one four higher, and pays half as much again); and from level 5 some carry a twist: do it without rolling. A mission you do not fancy can be swapped in the Missions sheet for a few dirhams. The table of kinds is `MK` in `js/game.js`.
 - **Levels:** missions, postcards, races and every run give experience; each level needs more than the last (125, 190, 265 … ). Each level pays dirhams, tops up the tank if it comes mid-run, and moves you up five ranks from Beginner to Desert falcon. Most levels open something: races at 2, 3, 4, 5, 7, 9, 11 and 12, the pickup at 3, a fourth mission at 4, the sand buggy at 6, a fifth mission at 8, the monster truck at 10. The results card and the Missions sheet always show the bar and the next thing it unlocks.
 - **Races:** drive through places in order against the clock for bronze, silver and gold. Nine fixed races unlock by level (1, 2, 3, 4, 5, 7, 9, 11, 12), and each also needs every place on its route to be in an area the car can reach: at the start only the camp loop is open, the grand tour is the whole journey north over both great dunes, and the Tal Moreeb hill climb, from the grandstand to the summit with medal times set by hand, opens last. A race of the day changes daily: a tour of four places near each other. Medal times come from a pace of 160, 220 and 285 pixels a second, adjusted for the ground the route crosses (faster over the salt, slower in the Empty Quarter, much slower up a great dune) and for the faster cars the later areas require. A place not yet found shows as ??? in a race's route, and driving the race finds it. Fuel does not run down in a race. An arrow and a light beacon point to the next checkpoint, the map shows the route, and the ghost of your best run races you.
+- **Practice, then rivals:** a race is first driven alone, for practice and a medal. Any medal opens the same race against three rivals, Salem, Hamad and Rashid: drivers in the game, not other players. They hold the route at a steady pace for the ground and finish in about 1.5, 1.2 and 1.03 times the gold pace, so the first is easy to beat, the second makes a race of it, and the third takes a near-gold drive. The place shows as you drive, the rivals show on the maps as dots in their colours, and a better place than ever before pays 40, 80 and 150 dirhams (times the length of the race) for third, second and first.
 - **Daily gift:** dirhams for the first visit each day, growing over seven days in a row. The same note tells a returning player that the sand has been dealt afresh.
-- **Upgrades:** engine, tyres, balance, tank and date basket, five levels each (100, 250, 500, 900, 1,500), except the engine, which costs more (150, 400, 900, 1,600, 2,600), and the turbo in two steps (2,500, then 6,000 for twin).
+- **Upgrades:** eight parts. Engine (more pull, for climbing and getting away; 150, 400, 900, 1,600, 2,600), turbo (single 2,500, twin 6,000), low gear (climbs a great dune faster), exhaust (a higher top speed), tyres (grip), suspension (harder to roll, kinder landings), tank (range) and date basket (picks up from further away); the last six cost 100, 250, 500, 900 and 1,500 a level. The garage shows the car as it stands in six bars: pull, top speed, dune climbing, grip, stability and range.
 
 ## Animals
 

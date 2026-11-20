@@ -227,6 +227,8 @@ body:has(#menu:not([hidden])) #mute{display:none} /* the menu has its own sound 
 #note.big{font-size:56px;line-height:1.1;font-weight:800;background:var(--shemagh);border:3px solid var(--ink);box-shadow:0 5px 0 var(--ink);min-width:110px;top:30%}
 .pbar{height:12px;border:2px solid var(--ink);border-radius:8px;background:#e9dcc0;overflow:hidden}
 .pbar i{display:block;height:100%;background:var(--teal)}
+.stats{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center;background:var(--cream);border:2px solid var(--sand-d);border-radius:14px;padding:10px 14px;margin:0 0 10px;font-weight:700;font-size:14px}
+.rbtns{display:grid;gap:6px} .rrow .btn.vs{background:var(--teal)} .rrow small.won{display:block;font-weight:800;color:var(--teal)}
 .rank{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:10px;background:var(--cream);border:2px solid var(--ink);border-radius:14px;padding:6px 12px;box-shadow:0 3px 0 var(--ink)}
 .rank b{font-size:18px} .rank span{background:var(--teal);color:var(--cream);border-radius:999px;padding:0 10px;font-weight:800;font-size:14px} .rank small{font-size:12px;font-weight:700;opacity:.75;font-variant-numeric:tabular-nums}
 .mrow{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 10px;background:var(--cream);border:2px solid var(--sand-d);border-radius:14px;padding:8px 12px}
