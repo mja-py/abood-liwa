@@ -63,7 +63,7 @@ const SITES = [ // the order is the order of the numbers on the map. Home: the c
 ];
 const REST = { camp: 1, well: 1, village: 1, farcamp: 1 }; // where a tank is topped up, once a run each: a stop in every area, and the old well
 for (const s of SITES) { s.f2 = s.r * s.r; s.coins = s.hill ? 300 : Math.round(10 + Math.hypot(s.x, s.y) / 330); } // the further from the camp a place is, the more its postcard pays; the top of Tal Moreeb is the last and pays most
-const site = id => SITES.find(s => s.id === id);
+const site = id => SITES.find(s => s.id === id) || WAYS[id]; // a place, or a big dune that a race goes round (WAYS, further down)
 const fogAt = (x, y) => { const i = Math.floor((x - CX + FOG_O) / FOG_C), j = Math.floor((y - CY + FOG_O) / FOG_C); return i >= 0 && i < FOG_N && j >= 0 && j < FOG_N && FOG[j * FOG_N + i] === 1; }; // has this point been uncovered
 function uncover(x, y, r = FOG_R) { // clear the haze round a point. Returns how many squares inside the reserve were new.
   let n = 0; const i0 = Math.max(0, Math.floor((x - CX - r + FOG_O) / FOG_C)), i1 = Math.min(FOG_N - 1, Math.floor((x - CX + r + FOG_O) / FOG_C)), j0 = Math.max(0, Math.floor((y - CY - r + FOG_O) / FOG_C)), j1 = Math.min(FOG_N - 1, Math.floor((y - CY + r + FOG_O) / FOG_C));
@@ -73,15 +73,19 @@ function uncover(x, y, r = FOG_R) { // clear the haze round a point. Returns how
 for (let p = 0; p < FOG.length; p++) { const cx = (p % FOG_N + 0.5) * FOG_C - FOG_O, cy = ((p / FOG_N | 0) + 0.5) * FOG_C - FOG_O, inside = cx * cx + cy * cy < R * R; if (inside) FOG_TOT++; if (FOG[p]) { fogAll++; if (inside) fogIn++; } } FOG_TOT--;
 if (fogFresh) { uncover(0, 0, 1200); for (const id of save.cards) { const q = site(id); if (q) uncover(q.x, q.y); } } // a first visit: the camp is known, and so is the ground round every place already found
 const fogPct = () => Math.floor(fogIn / FOG_TOT * 100);
-// twenty-five big dunes without a name, so there is high ground to climb and fly off in every area: six at home, twelve in the second
-// area, seven in the third. They are hills beside the 'arqoubs, which are mountains.
+// forty-two big dunes without a name, so there is high ground to climb and fly off in every area: ten at home, twenty in the second
+// area, twelve in the third. They are hills beside the 'arqoubs, which are mountains.
 const HILLS = [{ x: -900, y: -1200, h: 120 }, { x: -2600, y: 300, h: 130 }, { x: 2600, y: 200, h: 140 }, { x: 1500, y: 1000, h: 120 }, { x: -5200, y: -300, h: 140 }, { x: 5400, y: -400, h: 130 },
   { x: -4350, y: -9200, h: 150 }, { x: 5100, y: -6500, h: 150 }, { x: 4350, y: -13300, h: 150 }, { x: -12000, y: -5400, h: 140 }, { x: 12300, y: -6200, h: 140 }, { x: -450, y: -10300, h: 160 }, { x: 7200, y: -13400, h: 150 }, { x: -10350, y: -13500, h: 140 },
   { x: 200, y: -8400, h: 140 }, { x: -8600, y: -9800, h: 150 }, { x: 6300, y: -10400, h: 160 }, { x: 11300, y: -9800, h: 140 },
-  { x: -1500, y: -21400, h: 160 }, { x: -7800, y: -24500, h: 150 }, { x: -3600, y: -26300, h: 170 }, { x: 11400, y: -19600, h: 150 }, { x: -11400, y: -22800, h: 150 }, { x: -900, y: -23400, h: 160 }, { x: 12000, y: -22300, h: 150 }];
+  { x: -1500, y: -21400, h: 160 }, { x: -7800, y: -24500, h: 150 }, { x: -3600, y: -26300, h: 170 }, { x: 11400, y: -19600, h: 150 }, { x: -11400, y: -22800, h: 150 }, { x: -900, y: -23400, h: 160 }, { x: 12000, y: -22300, h: 150 },
+  { x: -3900, y: -1000, h: 150 }, { x: 4000, y: -1200, h: 160 }, { x: -7000, y: -700, h: 140 }, { x: 7300, y: -900, h: 150 },
+  { x: -2400, y: -5900, h: 150 }, { x: 2900, y: -9900, h: 170 }, { x: -6200, y: -11500, h: 150 }, { x: 9800, y: -11600, h: 140 }, { x: -12600, y: -9000, h: 150 }, { x: 3000, y: -7700, h: 160 }, { x: -3300, y: -12000, h: 140 }, { x: 7800, y: -6000, h: 150 },
+  { x: 5600, y: -21900, h: 160 }, { x: -2900, y: -19400, h: 150 }, { x: -7200, y: -26300, h: 160 }, { x: 9900, y: -24300, h: 150 }, { x: -13200, y: -19700, h: 150 }];
 // H() below is asked for every pixel of every ground tile, so it must not walk the whole list of dunes and places each time. They are
 // sorted once into squares of 1024 px, and H() looks only at the few that can reach the square it is in. The order is kept: big dunes
 // first, then the places, because level ground round a landmark is laid over whatever is already there.
+const WAYS = {}; HILLS.slice(0, 6).forEach((q, i) => { WAYS['h' + i] = { id: 'h' + i, x: q.x, y: q.y, r: 110, zone: 0, way: 1 }; }); // the first six big dunes, all on the home sands, as places a race can go round: h0 to h5
 const MRB_S2 = 1500 * 1500, MRB_C2 = 3900 * 3900; // Tal Moreeb is a bell of sand: this wide (squared), and cut off this far out (squared)
 const GC = 1024, GH = Math.ceil((R + 2500) / GC), GN = GH * 2, BUMPS = Array.from({ length: GN * GN }, () => []);
 for (const q of [...HILLS.map(q => ({ x: q.x, y: q.y, h: q.h, c2: 1.176e6, k: 0 })), ...SITES.map(s => s.hill ? { x: s.x, y: s.y, h: s.hill, s2: MRB_S2, c2: MRB_C2, e: Math.exp(-MRB_C2 / MRB_S2), k: 1 } : { x: s.x, y: s.y, f2: s.f2, c2: s.f2 * 6, k: 2 })]) {
@@ -167,7 +171,7 @@ function H(x, y) { // leaves the point's region weights in RW
     + ridge((x * 0.5 - y * 0.866) / 250 + w * 0.9 + 3.1, 0.66) * 12 * (0.4 + amp * 0.6) * (1 - 0.8 * RW[1])
     + vn(x * 0.0024 + 1.7, y * 0.0024 + 5.1) * 12 * (1 - 0.6 * RW[1] + 0.5 * RW[4]);
   if (RW[3] > 0) h += dune(u / 3 + 0.37, 0.72) * 105 * RW[3] * (1 - 0.65 * big);
-  h += w1 + w2;
+  h += w1 + w2 + (vn(x * 0.0008 + 31.7, y * 0.0008 - 17.2) - 0.5) * 170 * (1 - 0.85 * RW[1]) * (1 - 0.7 * Math.min(1, big)); // and the whole desert rolls: long swells, up and down, under the dunes
   const gi = Math.floor((x - CX) / GC) + GH, gj = Math.floor((y - CY) / GC) + GH;
   if (gi >= 0 && gi < GN && gj >= 0 && gj < GN) { const near = BUMPS[gj * GN + gi];
     for (let n = 0; n < near.length; n++) { const q = near[n], dx = x - q.x, dy = y - q.y, d2 = dx * dx + dy * dy; if (d2 >= q.c2) continue;
@@ -447,11 +451,14 @@ const TYRE = '#2a2623', STEEL = '#2f2a27';
 // The trucks. Each has its own body and its own feel: wb and wt are half the wheelbase and half the track, rf and rr the front and rear wheel
 // radius, ww the tyre width, lift how far the body is raised. Then what it changes in the driving: acc (engine, as a factor), grip, tip
 // (how much slope it takes to roll), rr (drag of soft sand), cl (extra pull uphill), hop (how hard it leaves a crest), tank (extra fuel).
-const TRUCKS = {
+const TRUCKS = { // body: which of the three shapes it is built on
   classic: { lvl: 1, cost: 0, wb: 25, wt: 20, rf: 12.5, rr0: 12.5, ww: 10.5, lift: 0, acc: 1, grip: 0, tip: 0, rr: 0, cl: 0.6, hop: 1.15, tank: 0 },
-  pickup: { lvl: 3, cost: 400, wb: 28, wt: 21, rf: 13, rr0: 13, ww: 10.5, lift: 1, acc: 0.98, grip: 0.35, tip: 0.045, rr: 0, cl: 0.7, hop: 1.1, tank: 20 },
-  buggy: { lvl: 6, cost: 900, wb: 27, wt: 21, rf: 11, rr0: 14.5, ww: 9.5, lift: 0, acc: 1.17, grip: -0.25, tip: -0.03, rr: -5, cl: 0.55, hop: 1.3, tank: -10 },
+  pickup: { lvl: 3, cost: 400, body: 'pickup', wb: 28, wt: 21, rf: 13, rr0: 13, ww: 10.5, lift: 1, acc: 0.98, grip: 0.35, tip: 0.045, rr: 0, cl: 0.7, hop: 1.1, tank: 20 },
+  buggy: { lvl: 6, cost: 900, body: 'buggy', wb: 27, wt: 21, rf: 11, rr0: 14.5, ww: 9.5, lift: 0, acc: 1.17, grip: -0.25, tip: -0.03, rr: -5, cl: 0.55, hop: 1.3, tank: -10 },
   monster: { lvl: 10, cost: 2000, wb: 27, wt: 25, rf: 18, rr0: 18, ww: 13, lift: 11, acc: 1.06, grip: 0.5, tip: 0.085, rr: -9, cl: 1, hop: 1.2, tank: 10 },
+  wagon: { lvl: 13, cost: 2800, wb: 32, wt: 22, rf: 15, rr0: 15, ww: 11.5, lift: 5, acc: 1.1, grip: 0.3, tip: 0.06, rr: -4, cl: 1.05, hop: 1.05, tank: 40 },   // a long desert wagon: the climber, with the biggest tank
+  rally: { lvl: 15, cost: 3600, body: 'pickup', wb: 27, wt: 23.5, rf: 13, rr0: 13.5, ww: 12, lift: 0, acc: 1.27, grip: 0.65, tip: 0.03, rr: -5, cl: 0.6, hop: 1.1, tank: 0 }, // a low wide rally truck: the quickest, and it grips
+  rail: { lvl: 18, cost: 4800, body: 'buggy', wb: 32, wt: 24, rf: 10, rr0: 17.5, ww: 12.5, lift: 2, acc: 1.32, grip: -0.1, tip: 0.01, rr: -9, cl: 0.85, hop: 1.5, tank: -15 }, // a long dune rail on huge back tyres: it flies
 };
 const truckOf = () => TRUCKS[save.truck] || TRUCKS.classic;
 function buildCar(kind) { // the parts that never move
@@ -459,7 +466,7 @@ function buildCar(kind) { // the parts that never move
   const abood = () => { mLine(M, [9, 0, 25, 3.5, 0, 31.5], '#1b1715', 1.8);                                 // steering column
     mHull(M, [-12.5, -3.5, -7, 7, 21], [-12.5, -4.5, -8.8, 8.8, 39], '#fbfaf4');                               // Abood's kandura
     mLine(M, [-4.2, 0, 38.5, -3.8, 0, 31], '#cfc9ba', 0.9, { b: 0.5 }); };                                   // its tassel
-  if (kind === 'buggy') { // a sand rail: a low narrow tub inside a cage of tubes, the engine out in the open at the back
+  if (tk.body === 'buggy') { // a sand rail: a low narrow tub inside a cage of tubes, the engine out in the open at the back
     mHull(M, [-30, 27, -10, 10, 10], [-32, 29, -12, 12, 20], 'main');                                    // the tub
     mHull(M, [27, 39, -8, 8, 11], [28, 36, -5, 5, 18], 'main');                                          // nose
     mFace(M, [8, -3, 20.2, 28, -3, 20.2, 28, 3, 20.2, 8, 3, 20.2], 'trim', 18, 0, 0, { b: 0.6, noInk: 1 });
@@ -476,7 +483,7 @@ function buildCar(kind) { // the parts that never move
     mLine(M, [4, -12, 46, 4, 12, 46], 'trim', 2.6, { ol: 1 }); mLine(M, [-20, -12, 58, -20, 12, 58], 'trim', 2.6, { ol: 1 });
     lights(-20, 58.5); abood(); return M;
   }
-  const pick = kind === 'pickup', bk = pick ? -47 : -36; // the pickup carries a long open load bed where the others have a rear deck
+  const pick = tk.body === 'pickup', bk = pick ? -47 : -36; // the pickup carries a long open load bed where the others have a rear deck
   mHull(M, [bk + 2, 30, -13, 13, 8], [bk, 33, -15, 15, 20], 'main');                                 // the tub
   mHull(M, [8, 33, -15, 15, 20], [11, 30, -12, 12, 26], 'main');                                     // bonnet
   mFace(M, [12, -3, 26.2, 29.5, -3, 26.2, 29.5, 3, 26.2, 12, 3, 26.2], 'trim', 20, 0, 0, { b: 0.6, noInk: 1 }); // racing stripe
@@ -873,7 +880,7 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
   const slope = (x, y) => Math.hypot(H(x + 6, y) - H(x - 6, y), H(x, y + 6) - H(x, y - 6)) / 12;
   const SOLID = PROPS.filter(q => q.rad), open = (x, y, m) => rimD(x, y) < R - 420 && SITES.every(s => Math.hypot(s.x - x, s.y - y) > s.r + m) && SOLID.every(q => Math.hypot(q.x - x, q.y - y) > q.rad + 90); // SOLID: the things a car cannot drive through
   for (let tries = 0; RAMPS.length < 220 && tries < 90000; tries++) {
-    const first = !RAMPS.length, a = r() * TAU, d = first ? 420 + r() * 160 : Math.sqrt(r()) * (R - 600), x = (first ? 0 : CX) + Math.cos(a) * d, y = (first ? 0 : CY) + Math.sin(a) * d; // the first ramp is by the camp, for the lesson
+    const first = !RAMPS.length, a = first ? -0.25 - r() * 1.1 : r() * TAU, d = first ? 420 + r() * 160 : Math.sqrt(r()) * (R - 600), x = (first ? 0 : CX) + Math.cos(a) * d, y = (first ? 0 : CY) + Math.sin(a) * d; // the first ramp is by the camp, for the lesson
     if (slope(x, y) > 0.15 || RAMPS.some(o => Math.hypot(o.x - x, o.y - y) < 800) || !open(x, y, 170) || Math.hypot(x - 540, y + 280) < 300 || Math.hypot(x - 300, y - 85) < 330) continue; // and clear of the first jerrycan and the lesson's trail of dates
     let dir = -1, low = 1e9; for (let k = 0; k < 16; k++) { const an = k / 16 * TAU, cs = Math.cos(an), sn = Math.sin(an);
       if (slope(x - cs * 150, y - sn * 150) > 0.3 || H(x - cs * 150, y - sn * 150) > H(x, y) + 22 || !open(x - cs * 200, y - sn * 200, 0) || !open(x + cs * 320, y + sn * 320, 40)) continue; // the run-up has to be drivable, and neither it nor the landing may be in a camp or against a palm
@@ -915,7 +922,7 @@ let worldDay = '', dealDay = null; // the day the dates, jerrycans and golden da
 let st = 'load', t = 0, W = 0, Hh = 0, zoom = 1, dpr = 1, rs = 1, camx = 0, camy = 0, shake = 0, noteT = 0, slow = 0, hudKey = '', miniTick = 0, edgeT = 0, hitT = 0;
 const car = {}, run = { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], fuel: 100, max: 100, over: 0, low: false, seen: {}, vis: [], live: false };
 const PH = { acc: 350, grip: 3.4, rr: 26, tip: 0.4, pick: 1700, hop: 1.15, cl: 0.6, turbo: 0, drag: 1, gear: 0 }; // what the upgrades change, set at the start of a run
-const parts = [], floats = [], tracks = [[], [], [], []], keys = {}, joy = { on: false, hard: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 }; // tracks: two tyre marks, and two darker ones laid down while sliding
+const flyers = [], parts = [], floats = [], tracks = [[], [], [], []], keys = {}, joy = { on: false, hard: false, src: '', id: 0, ox: 0, oy: 0, x: 0, y: 0 }; // tracks: two tyre marks, and two darker ones laid down while sliding
 const rings = []; let camZ = 1; // rings: circles of dust spreading on the sand; camZ: the view pulls back a little at speed and in the air
 let stallT = 0, hintT = 0; // stuck on a steep face with the engine pulling, and how long until the next hint about it
 // What the ground under the car changes, by region (in the order of REG): drag, soft-sand resistance, and sideways grip. On the level
@@ -926,8 +933,8 @@ const ACC = 350, BRAKE = 520, DRAG = 0.75, RR = 26, GR = 700, GRIP = 3.4, // bas
    TURN = 2.7, GRAV = 520, BURN = 100 / 110, JOY_R = 56, HARD_R = 96, TIP = 0.4; // the pad: full throttle at JOY_R from where the finger went down; past HARD_R is pressing hard
 function resetCar() {
   Object.assign(car, { x: 70, y: 120, ang: -0.28, vx: 0, vy: 0, z: H(70, 120), vz: 0, gvz: 0, air: false, airT: 0, steer: 0, thr: 0, tip: 0, roll: 0, rollT: 0, rdx: 0, rdy: 0, safe: 0, sf: 0, trk: 0, pit: 0, rol: 0, spin: 0, rside: 1,
-    drift: false, dsc: 0, dyaw: 0, dT: 0, dsn: 0, dl: 0, boostT: 0, rampT: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0, rev: false, sx: 70, sy: 120, st: 0, tb: 0, tbOn: false, pthr: 0, wt: [9, 9], crash: 0 });
-  for (const a of tracks) a.length = 0; parts.length = floats.length = rings.length = 0; stallT = 0; camZ = 1;
+    drift: false, dsc: 0, dyaw: 0, dT: 0, dsn: 0, dl: 0, boostT: 0, rampT: 0, tside: 1, twoT: 0, lean: 0, fp: 0, fy: 0, a0: 0, rev: false, sx: 70, sy: 120, st: 0, tb: 0, tbOn: false, pthr: 0, wt: [9, 9], crash: 0, mom: 0, onFace: 0 });
+  for (const a of tracks) a.length = 0; parts.length = floats.length = rings.length = flyers.length = 0; stallT = 0; camZ = 1;
 }
 const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
 function resize() {
@@ -955,7 +962,7 @@ function ring(x, y, col, r = 16) { rings.push({ x, y, r, life: 1, col }); if (ri
 // ---------- missions, levels, races ----------
 // What keeps a run worth starting: three missions at a time (a new one replaces each finished one, harder as the
 // level rises), levels from experience, and timed races between places with bronze, silver and gold times.
-const UPS = ['engine', 'turbo', 'gear', 'exhaust', 'tyres', 'balance', 'tank', 'magnet'], UP_COST = [100, 250, 500, 900, 1500], ENGINE_COST = [150, 400, 900, 1600, 2600], TURBO_COST = [2500, 6000]; // the engine and the turbo are what the 'arqoubs ask for, and cost more than the rest
+const UPS = ['engine', 'turbo', 'gear', 'exhaust', 'tyres', 'balance', 'tank', 'magnet'], UP_COST = [100, 250, 500, 900, 1500], ENGINE_COST = [100, 250, 500, 1200, 2000], TURBO_COST = [2000, 5000]; // the engine and the turbo are what the 'arqoubs ask for, and cost more than the rest
 const upMax = uid => uid === 'turbo' ? 2 : 5, upCost = (uid, lv) => uid === 'turbo' ? TURBO_COST[lv] : uid === 'engine' ? ENGINE_COST[lv] : UP_COST[lv]; // the turbo comes in two steps, single then twin; the rest in five
 // What the car amounts to with its truck and upgrades, each from 0 to 1, for the bars in the garage: pull, top speed, how fast it goes up
 // a great dune, grip, how hard it is to roll, and how far a tank takes it.
@@ -964,7 +971,7 @@ function carStats() { const u = save.up, tk = truckOf(), acc = (1 + 0.07 * u.eng
 const wallGoal = () => { const k = nextGate(); return k > 3 ? '' : T('wallGoal', T('wallName')[k - 1], T('need')[k - 1]); }; // what stands between the player and the next layer
 const xpNeed = l => 70 + 50 * l + 5 * l * l, RANKS = [1, 3, 6, 10, 15];
 // what each level opens. The next one is always on show, on the results card and the missions sheet, so there is something to play for.
-const UNLOCKS = [[2, 'un_race'], [3, 't_pickup'], [4, 'un_slot'], [5, 'un_race'], [6, 't_buggy'], [7, 'un_grand'], [8, 'un_slot'], [9, 'un_race'], [10, 't_monster'], [11, 'un_race'], [12, 'un_race']];
+const UNLOCKS = [[2, 'un_race'], [3, 't_pickup'], [4, 'un_slot'], [5, 'un_race'], [6, 't_buggy'], [7, 'un_grand'], [8, 'un_slot'], [9, 'un_race'], [10, 't_monster'], [11, 'un_race'], [12, 'un_race'], [13, 't_wagon'], [15, 't_rally'], [18, 't_rail']];
 const nextUnlock = () => { const u = UNLOCKS.find(q => q[0] > save.lvl); return u ? T('unNext', u[0], T(u[1])) : ''; };
 function rankRow(top) { // rank, level, a bar of experience towards the next level
   const mkEl = (tag, txt) => { const e = document.createElement(tag); if (txt !== undefined) e.textContent = txt; return e; }, bar = mkEl('div'), fill = mkEl('i'); bar.className = 'pbar'; fill.style.width = Math.round(save.xp / xpNeed(save.lvl) * 100) + '%'; bar.append(fill);
@@ -991,14 +998,14 @@ const MK = {
   spin: ['s', 2, 1, 0.25, 5, 1, 1.3], stunt: ['s', 1, 550, 150, 8000, 50, 1.2], combo: ['s', 2, 2, 0.34, CH_MAX, 1, 1.3],
   ramp: ['s', 1, 2, 0.5, 10, 1, 1.1], hoop: ['s', 2, 1, 0.34, 6, 1, 1.4], boost: ['d', 1, 2, 0.5, 8, 1, 1],
   visit: ['e', 1, 2, 0.34, 6, 1, 1.2], goto: ['e', 1, 1, 0, 1, 1, 1], dash: ['e', 3, 1, 0, 1, 1, 1.4], deliver: ['e', 2, 2, 0, 2, 1, 1.5], summit: ['e', 3, 1, 0, 1, 1, 1.5], reem: ['e', 2, 3, 0.6, 10, 1, 1.2],
-  race: ['r', 2, 1, 0, 1, 1, 1.3], medal: ['r', 3, 1, 0.2, 3, 1, 1.6],
+  race: ['r', 2, 1, 0, 1, 1, 1.3], win: ['r', 3, 1, 0, 1, 1, 1.7], medal: ['r', 3, 1, 0.2, 3, 1, 1.6],
   tdates: ['t', 2, 110, 30, 1e9, 10, 1.4], tdist: ['t', 2, 3600, 600, 1e9, 100, 1.4], tstunt: ['t', 3, 2500, 600, 1e9, 100, 1.4], tair: ['t', 3, 12, 2.5, 1e9, 1, 1.4], tvisit: ['t', 3, 8, 1.5, 1e9, 1, 1.4],
 };
 const CAT_W = { c: 3, d: 3, s: 4, e: 3, r: 1, t: 1.5 }, DEC = { air: 1, jump: 1, two: 1, twohold: 1, rair: 1 }; // how often each category is dealt; the kinds counted in tenths
 const RKIND = new Set(['regions', 'rdates', 'rdist', 'rdrift', 'rair']), slots = () => 3 + (save.lvl >= 4) + (save.lvl >= 8), swapCost = () => 10 + 5 * save.lvl;      // three missions at a time, a fourth from level 4, a fifth from level 8
 // A mission can also be dealt in the middle of a run, to take the place of one just finished. It then counts from that moment: kinds that add
 // up (ADD) start from what the run has already done, and the others are only dealt if the run is still under half way to their target.
-const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem', 'regions', 'rdates', 'rdist', 'rdrift', 'rair', 'fog']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal']);
+const ADD = new Set(['dates', 'cans', 'earn', 'gold', 'dist', 'boost', 'air', 'drift', 'donut', 'two', 'flip', 'spin', 'stunt', 'ramp', 'hoop', 'visit', 'reem', 'regions', 'rdates', 'rdist', 'rdrift', 'rair', 'fog']), NOT_LIVE = new Set(['rush', 'dash', 'race', 'medal', 'win']);
 function newMission(avoid, live) { // avoid: the kind being swapped away, which must not come straight back
   const L = save.lvl, act = save.missions.filter(m => !m.done), catN = c => act.filter(m => MK[m.t][0] === c).length, bad = live ? new Set(NOT_LIVE) : new Set();
   for (let tries = 0; ; tries++) { const m = dealMission(avoid, bad, L, act, catN); if (!live) return m;
@@ -1047,7 +1054,7 @@ function mRaw(m) { // how far a mission has got, counting the run in progress
     case 'ramp': return run.ramps;
     case 'hoop': return run.hoops;
     case 'boost': return run.boosts;
-    case 'earn': return Math.floor(run.dates / 10) + Math.floor(run.dist / 2000) + Math.floor(run.stunt / 50);
+    case 'earn': return Math.floor(run.dates / 2) + Math.floor(run.dist / 2000) + Math.floor(run.stunt / 50);
     case 'dist': return run.dist / 8;
     case 'noroll': return run.noRoll / 8;
     case 'speed': return run.maxSp * 0.45;
@@ -1070,6 +1077,7 @@ function mRaw(m) { // how far a mission has got, counting the run in progress
     case 'summit': return run.seen.moreeb ? 1 : 0;
     case 'reem': return run.reem;
     case 'race': return run.done ? 1 : 0;
+    case 'win': return run.done && run.done.place === 1 ? 1 : 0; // first against the rivals
     case 'medal': return run.done ? run.done.medal : 0;
     case 'tdates': return m.p + (on ? run.dates : 0);
     case 'tdist': return m.p + (on ? run.dist / 8 : 0);
@@ -1148,7 +1156,8 @@ function tutEnd(finished) { // finished, skipped, or the run ended under it
 }
 // races: drive through the places in order against the clock. The daily race changes every day.
 const RACES = [ // each is open once its level is reached and every place on it is in an area the car can get to
-  { id: 'camp', lvl: 1, pts: ['camp', 'well', 'camp'] }, { id: 'oasis', lvl: 2, pts: ['camels', 'festival', 'oasis', 'farm'] },
+  { id: 'camp', lvl: 1, pts: ['camp', 'well', 'camp'] }, { id: 'dunes', lvl: 1, pts: ['camp', 'h1', 'h0', 'camp'] }, { id: 'homeE', lvl: 2, pts: ['camp', 'h2', 'h5', 'well', 'camp'] }, { id: 'foot', lvl: 3, pts: ['well', 'h4', 'h1', 'camp'] }, // four races on the home sands, three of them round its big dunes
+  { id: 'oasis', lvl: 2, pts: ['camels', 'festival', 'oasis', 'farm'] },
   { id: 'moreeb', lvl: 4, pts: ['gate', 'stands', 'fort'] }, { id: 'south', lvl: 5, pts: ['track', 'falcon', 'sabkha', 'roses'] },
   { id: 'grand', lvl: 7, pts: ['camp', 'camels', 'track', 'gate', 'stands', 'fort', 'tower'] }, // the whole journey north, over both 'arqoubs
   { id: 'climb', lvl: 3, pts: ['stands', 'moreeb'], tg: [26, 19, 14.5] }, // the hill climb: from the grandstand to the top of Tal Moreeb. Its medal times are set by hand.
@@ -1165,6 +1174,7 @@ function dailyRace() {
 // Rivals. A race is first driven alone, for practice and a medal. A medal opens the same race against three others, who are not other
 // players but drivers in the game: one who is easy to beat, one who makes a race of it, one who is hard. They keep to the route at a
 // steady pace for the ground, slower up a great dune as the player is, and finish in k times the gold time.
+const RACE_PAY = [0, 60, 30, 12, 0]; // what a place against the rivals pays, first to fourth, times the length of the race
 const RIVALS = [{ truck: 'pickup', col: 'teal', k: 1.5, lane: -70 }, { truck: 'buggy', col: 'yellow', k: 1.2, lane: 70 }, { truck: 'monster', col: 'black', k: 1.03, lane: 140 }];
 function routeTable(rc, sx, sy) { // the route as a string of points from the starting line, each with how far along it is, counted as the pace counts it
   const out = [{ x: sx, y: sy, e: 0 }]; let e = 0, px = sx, py = sy;
@@ -1189,7 +1199,7 @@ function finishRace() {
   const rc = run.race, key = raceKey(rc), tg = raceTargets(rc), tm = run.rt, k = Math.max(1, Math.round(raceLen(rc) / 8000));
   if (run.rv) { // against the rivals: what counts is the place. A better place than ever before pays for each step up.
     let place = 1; for (let i = 0; i < RIVALS.length; i++) if (rivalAt(run.rv, i).done) place++;
-    const had = save.wins[key] || 5; let gain = 0; for (let p = had - 1; p >= place; p--) gain += [0, 150, 80, 40, 0][p] * k; if (place < had) save.wins[key] = place;
+    const had = save.wins[key] || 5; let gain = RACE_PAY[place] * k; for (let p = had - 1; p >= place; p--) gain += [0, 150, 80, 40, 0][p] * k; if (place < had) save.wins[key] = place; // prize money for the place, every time; and a bonus for each step better than ever before
     save.coins += gain; run.done = { tm, medal: [0, 3, 2, 1, 0][place], gain, best: save.times[key] || tm, isBest: false, place }; addXP(40 + (4 - place) * 25); endRun(false); return; }
   const medal = tm <= tg[2] ? 3 : tm <= tg[1] ? 2 : tm <= tg[0] ? 1 : 0, had = save.medals[key] || 0;
   let gain = 0; for (let i = had + 1; i <= medal; i++) gain += [0, 30, 60, 120][i] * k;
@@ -1277,6 +1287,10 @@ function update(dt) {
   if (!LK.k) { ridgeT(car.x, car.y); const t1 = WT[0], t2 = WT[1], on = t => t !== 9 && t > -0.95 && t < 0.95 && (t > 0.04 || t < 0), k = on(t2) ? 2 : on(t1) ? 1 : 0;
     if (k) { upY = (k === 2 ? t2 : t1) < 0 ? -1 : 1; upCap = 125 + 45 * (save.up.engine - GATES[k].engine) + 22 * PH.gear; }
     else { const dx = MRB.x - car.x, dy = MRB.y - car.y, dm = Math.hypot(dx, dy); if (dm < 3100 && dm > 90) { upX = dx / dm; upY = dy / dm; upCap = 125 + 22 * PH.gear; } } }
+  // A run-up counts. The speed a car brings onto a face is not lost at once: it is carried up as momentum that the sand takes back
+  // bit by bit, so a car that charges the dune is well up it before it is down to a crawl, and one that starts from rest crawls all the way.
+  if (upCap && !car.onFace) car.mom = clamp(Math.hypot(car.vx, car.vy) - upCap, 0, 320);
+  car.onFace = upCap > 0; car.mom = Math.max(0, car.mom - 55 * dt);
   region(car.x, car.y); gDrag = gRr = gGrip = 0; for (let i = 0; i < 6; i++) { gDrag += RW[i] * G_DRAG[i]; gRr += RW[i] * G_RR[i]; gGrip += RW[i] * G_GRIP[i]; }
   let sp = Math.hypot(car.vx, car.vy); run.dist += sp * dt; run.nr += sp * dt; if (run.nr > run.noRoll) run.noRoll = run.nr; if (RW[3] > 0.5) run.rDist += sp * dt;
   // A ramp: crossed the right way, on the wheels or skimming just above the sand, it throws the car up. Faster in is higher out.
@@ -1337,7 +1351,7 @@ function update(dt) {
     const hold = lockB > 0 && cs * lockNx + sn * lockNy > 0.15 ? 1 - 0.85 * lockB : 1; // the engine of a car that is not ready digs in on a ridge face instead of pulling
     const push = (thr > 0 ? thr * PH.acc * low * (car.tbOn ? 1 + 0.18 * PH.turbo * clamp((430 - f) / 170, 0.2, 1) : 1) : thr < 0 ? (f > 20 ? -BRAKE : thr * PH.acc * (car.rev ? 0.8 : 0.5)) : 0) * hold;
     f += (push - GR * sf - DRAG * gDrag * PH.drag * f) * dt; f -= clamp(f, -PH.rr * gRr * dt, PH.rr * gRr * dt);   // engine, gravity along the slope, drag, soft-sand resistance
-    if (upCap) { const cu = cs * upX + sn * upY; if (cu > 0.25) { const cap = (upCap + (car.tbOn ? 65 : 0)) / cu; if (f > cap) f -= (f - cap) * Math.min(1, 5 * dt); } } // going up a great ridge
+    if (upCap) { const cu = cs * upX + sn * upY; if (cu > 0.25) { const cap = (upCap + car.mom + (car.tbOn ? 65 : 0)) / cu; if (f > cap) f -= (f - cap) * Math.min(1, 5 * dt); } } // going up a great ridge
     l += -GR * sl * dt; l *= Math.exp(-(car.drift ? (want ? 1.05 + 3 * Math.max(0, slip - 0.85) : 3) : PH.grip + gGrip) * dt); // the slope pulls sideways; the tyres only half hold in sand, hardly at all in a slide, and bite again once it is let go
     car.vx = cs * f - sn * l; car.vy = sn * f + cs * l; sp = Math.hypot(car.vx, car.vy);
     const gvz = gx * car.vx + gy * car.vy;
@@ -1412,7 +1426,7 @@ function update(dt) {
       if (Math.abs(o.x - car.x) < 700 && Math.abs(o.y - car.y) < 520 && Math.random() < dt * 9) puff(o.x, o.y + (o.dir < 0 ? 34 : -34), 0, o.dir < 0 ? 70 : -40, 1, true, 1); }
     if (Math.abs(o.x - car.x) < 80 && Math.abs(o.y - car.y) < 80) bump(o, 0); }
   // pick-ups
-  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; if (regAt(o.x, o.y) === 5) run.rDates++; play('date', 1 + (run.dates % 8) * 0.06); spark(o.x, o.y - 6, 3); } }
+  for (const o of DATES) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick) { o.off = true; run.dates++; if (run.t < 60) run.d60++; if (regAt(o.x, o.y) === 5) run.rDates++; play('date', 1 + (run.dates % 8) * 0.06); if (dx * dx + dy * dy > 2500 && flyers.length < 40) flyers.push({ x: o.x, y: o.y, life: 1 }); else spark(o.x, o.y - 6, 3); } } // a date picked up from a distance flies into the basket
   for (const o of GOLD) if (!o.off) { const dx = o.x - car.x, dy = o.y - car.y; if (dx * dx + dy * dy < PH.pick + 1200) { o.off = true; run.dates += 10; run.gold++; play('power', 1.6); buzz(30); float(o.x, o.y - 44, T('goldPlus'), '#ffe07a'); spark(o.x, o.y - 10, 16); ring(o.x, o.y, '#ffe07a'); } }
   for (const o of PADS) { o.cd -= dt; if (o.cd > 0 || car.air || car.roll) continue; const dx = o.x - car.x, dy = o.y - car.y; // a boost strip: a shove the way its arrows point
     if (dx * dx + dy * dy < 2600) { o.cd = 2; car.vx += o.cs * 240; car.vy += o.sn * 240; car.boostT = 1.4; run.boosts++; play('power', 1.4, 0.8); buzz(25); float(car.x, car.y - 100, T('st_boost'), '#bff0c0'); ring(o.x, o.y, '#bff0c0', 30); } }
@@ -1569,6 +1583,7 @@ function render(dt) {
   c.globalAlpha = 1;
   if (st !== 'menu' && st !== 'load') {
     const eD = spr('date'), eC = spr('can'); c.fillStyle = 'rgba(60,30,15,.2)';
+    for (let i = flyers.length - 1; i >= 0; i--) { const f = flyers[i]; f.life -= dt * 5.5; if (f.life <= 0) { flyers.splice(i, 1); continue; } const k = 1 - f.life, e = k * k; blit(c, eD, f.x + (car.x - f.x) * e, f.y + (car.y - 20 - f.y) * e - Math.sin(k * Math.PI) * 26); }
     for (let i = 0; i < DATES.length; i++) { const o = DATES[i]; if (o.off || !inView(o.x, o.y, 20)) continue; c.beginPath(); c.ellipse(o.x + 2, o.y + 8, 6, 2.5, 0, 0, TAU); c.fill(); blit(c, eD, o.x, o.y - 5 - Math.sin(t * 3 + i) * 2.5); }
     for (let i = 0; i < CANS.length; i++) { const o = CANS[i]; if (o.off || !inView(o.x, o.y, 30)) continue; c.beginPath(); c.ellipse(o.x + 2, o.y + 3, 12, 4, 0, 0, TAU); c.fill(); blit(c, eC, o.x, o.y - 3 - Math.sin(t * 2.4 + i) * 3); }
     for (let i = 0; i < GOLD.length; i++) { const o = GOLD[i]; if (o.off || !inView(o.x, o.y, 60)) continue; const by = o.y - 12 - Math.sin(t * 2.6 + i) * 4, pu = 0.5 + 0.5 * Math.sin(t * 5 + i); // a golden date, glowing
@@ -1704,7 +1719,7 @@ function showMenu() {
 }
 function startRun(rc, lesson, rivals) { // rc: a race to drive, or nothing for a free safari. lesson: give the first lesson again, asked for from How to play
   unlockAudio(); st = 'play'; newDay(); resetCar(); resetWorld();
-  const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (41 + 13 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl, turbo: u.turbo, drag: (1 + 0.02 * u.engine) * (1 - 0.025 * u.exhaust), gear: u.gear }); // drag: a stronger engine is mostly pull, for climbing and getting away; top speed rises with it only half as fast
+  const u = save.up, tk = truckOf(); Object.assign(PH, { acc: ACC * (1 + 0.07 * u.engine) * tk.acc, grip: GRIP + 0.45 * u.tyres + tk.grip, rr: RR - 2.5 * u.tyres + tk.rr, tip: TIP + 0.022 * u.balance + tk.tip, pick: (56 + 24 * u.magnet) ** 2, hop: tk.hop, cl: tk.cl, turbo: u.turbo, drag: (1 + 0.02 * u.engine) * (1 - 0.025 * u.exhaust), gear: u.gear }); // drag: a stronger engine is mostly pull, for climbing and getting away; top speed rises with it only half as fast
   Object.assign(run, { dist: 0, dates: 0, air: 0, rolls: 0, cards: [], max: 100 + u.tank * 12 + tk.tank, over: 0, low: false, seen: {}, newBest: false, live: true, maxAir: 0, cans: 0, t: 0, d60: 0, maxSp: 0, far: 0, maxDrift: 0, maxTwo: 0, donuts: 0, reem: 0, seenT: {}, ramps: 0, hoops: 0, boosts: 0, gold: 0, tows: 0, stunt: 0, drift: 0, two: 0, flips: 0, spins: 0, chain: 0, chainT: 0, combo: 0, nr: 0, noRoll: 0, vis: [], cur: '', mdone: 0, mcoins: 0, lvlUp: 0, mt: 0, reg: 0, regs: { 0: 1 }, regN: 1, regNote: -1, rDist: 0, rAir: 0, rDrift: 0, rDates: 0, fogNew: 0, rum: 0, rest: {}, crestT: 1, crests: 0,
     race: rc || null, ri: 1, rt: 0, cd: rc ? 3 : 0, cdn: 0, rec: [], recT: 0, ghost: rc && !rivals ? ghosts[raceKey(rc)] : null, done: null, rv: null, place: 0 }); run.fuel = run.max;
   run.tut = !rc && (lesson || !save.tut) ? { i: 0, ok: 0, d0: 0, r0: 0, f0: 0 } : null; tutKey = ''; show('tut', !!run.tut); if (run.tut) tutHud(0, 0);
@@ -1722,7 +1737,7 @@ async function endRun(early) {
   if (st !== 'play' && st !== 'pause') return;
   const dn = run.done, raced = !!run.race;
   tutEnd(); st = 'over'; joy.on = false; play(dn ? 'power' : 'lose'); releaseWake(); ['hud', 'mis', 'miniBtn', 'pauseBtn', 'pausePop', 'sheet'].forEach(id => show(id, false)); $('note').hidden = true;
-  const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 10), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
+  const m = Math.round(run.dist / 8), air = Math.round(run.air * 10) / 10, cS = Math.floor(run.dates / 2), cD = Math.floor(m / 250), cA = Math.floor(run.stunt / 50), total = cS + cD + cA;
   run.newBest = !raced && m > save.best; if (run.newBest) save.best = m; save.coins += total;
   endDrift(); endTwo(); checkMissions(); addXP(m / 40 + run.dates / 2 + run.stunt / 25);
   for (const q of save.missions) { if (!q.done && MK[q.t][0] === 't') q.p = Math.min(q.n, mProg(q)); delete q.o; delete q.fresh; } // missions that add up over several runs keep their progress; the rest start again next run
@@ -1765,7 +1780,7 @@ function openSheet(id) {
     if (wallGoal()) body.append(el('p', 'hint goal', wallGoal())); body.append(el('p', 'label', T('garageNote')), el('p', 'label', T('trTitle'))); const tg = el('div', 'cards'), mineT = COLORS[save.color] || COLORS.white;
     for (const [tid, tk] of Object.entries(TRUCKS)) { // four trucks, opened by level and then bought
       const own = save.trucks.includes(tid), on = save.truck === tid, locked = !own && save.lvl < tk.lvl, card = el('div', 'card' + (on ? ' on' : '') + (locked ? ' locked' : '')), cn = mk(192, 192), g = cn.getContext('2d');
-      g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); drawCar3D(g, 94, 160, tid === 'monster' ? 1.02 : 1.12, { ang: 0.95, steer: 0.5, speed: 90, t: 1, col: mineT, truck: tid });
+      g.fillStyle = '#e9b872'; g.fillRect(0, 0, 192, 192); drawCar3D(g, 94, 160, tid === 'monster' ? 1.02 : tid === 'wagon' || tid === 'rail' ? 1.0 : 1.12, { ang: 0.95, steer: 0.5, speed: 90, t: 1, col: mineT, truck: tid });
       const btn = el('button', on || own ? 'sec' : '', on ? T('using') : own ? T('use') : locked ? T('locked', tk.lvl) : T('buy', tk.cost)); btn.type = 'button'; btn.disabled = on || locked;
       btn.onclick = () => { if (!own) { if (save.coins < tk.cost) return note(T('notEnough')); save.coins -= tk.cost; save.trucks.push(tid); note(T('bought')); play('power'); } save.truck = tid; persist(); coinsUI(); openSheet('garage'); };
       card.append(cn, el('b', '', T('t_' + tid)), el('small', '', T('td_' + tid)), btn); tg.append(card); }
@@ -1809,10 +1824,10 @@ function openSheet(id) {
   } else if (id === 'races') {
     body.append(el('p', 'label', T('raceNote')));
     for (const rc of [dailyRace(), ...RACES]) { const key = raceKey(rc), tg = raceTargets(rc), med = save.medals[key] || 0, best = save.times[key], shut = !raceOpen(rc), locked = save.lvl < rc.lvl || shut, row = el('div', 'rrow' + (rc.id === 'daily' ? ' daily' : ''));
-      const info = el('div', 'rinfo'), tm = el('div', 'rtimes'); info.append(el('b', '', T('r_' + rc.id)), el('small', '', rc.pts.map(id => save.cards.includes(id) ? T('s_' + id) : T('unknown')).join(getLang() === 'ar' ? ' ← ' : ' → ')));
+      const info = el('div', 'rinfo'), tm = el('div', 'rtimes'); info.append(el('b', '', T('r_' + rc.id)), el('small', '', rc.pts.map(id => WAYS[id] ? T('bigDune') : save.cards.includes(id) ? T('s_' + id) : T('unknown')).join(getLang() === 'ar' ? ' ← ' : ' → ')));
       tg.forEach((sec, i) => { const sp = el('span', 'md m' + (i + 1) + (med > i ? ' on' : '')); sp.append(el('i'), el('span', '', fmtTime(sec))); tm.append(sp); }); if (best) tm.append(el('span', 'best', T('bestTime', fmtTime(best)))); info.append(tm);
       const btn = el('button', 'btn', save.lvl < rc.lvl ? T('locked', rc.lvl) : shut ? T('raceNeed') : T('racePractice')); btn.type = 'button'; btn.disabled = locked; btn.onclick = () => startRun(rc);
-      const won = save.wins[key], vs = el('button', 'btn vs', T('raceRivals')), bx = el('div', 'rbtns'); vs.type = 'button'; vs.disabled = locked || !med; vs.onclick = () => startRun(rc, false, true); if (won) info.append(el('small', 'won', T('bestPlace', T('place')[won - 1]))); else if (!locked && !med) info.append(el('small', 'won', T('rivalsHint')));
+      const won = save.wins[key], vs = el('button', 'btn vs', T('raceRivals', RACE_PAY[1] * Math.max(1, Math.round(raceLen(rc) / 8000)))), bx = el('div', 'rbtns'); vs.type = 'button'; vs.disabled = locked || !med; vs.onclick = () => startRun(rc, false, true); if (won) info.append(el('small', 'won', T('bestPlace', T('place')[won - 1]))); else if (!locked && !med) info.append(el('small', 'won', T('rivalsHint')));
       bx.append(btn, vs); row.append(info, bx); body.append(row); }
   } else { const ol = el('ol', 'help-list'); for (const line of T('help')) ol.append(el('li', '', line));
     if (st === 'menu') { const again = el('button', 'ghost again', T('tutAgain')); again.type = 'button'; again.onclick = () => { closeSheet(); startRun(null, true); }; body.append(again); } // Baba's first lesson, for anyone who wants it again
@@ -1868,7 +1883,7 @@ const fsEl = document.documentElement;
 if (fsEl.requestFullscreen && !IOS && !APP) { // not on iPad or iPhone: their full screen ends on a downward swipe, which a steering drag would trigger; the home-screen app is the way there
   show('fsBtn', true); $('fsBtn').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else fsEl.requestFullscreen().catch(() => {}); }; }
 onLang(() => { SPR.delete('gate'); tutKey = ''; coinsUI(); const b = $('menuBest'); b.textContent = T('best', save.best); if (sheetId && !$('sheet').hidden) openSheet(sheetId); });
-if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, region, regAt, RW, REG, ANIMALS, FOG, uncover, fogAt, fogPct, persist, parts, zoneAt, ridgeT, WT, WH, RNG, CX, CY, rimD, gateOK, gateMax, lockAt, raceOpen, RIVALS, rivalAt, carStats, get audio() { return { state: actx && actx.state, engine: !!eng, gear: eng ? eng.gear : -1 }; }, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
+if (location.hash === '#debug') window.liwa = { car, run, save, joy, H, MK, TUT, startRun, showMenu, newDay, PH, TRUCKS, DATES, CANS, addXP, xpNeed, PROPS, SITES, R, RAMPS, HOOPS, PADS, GOLD, HILLS, newMission, fillMissions, mProg, mText, slots, startRoll, RACES, dailyRace, raceTargets, raceLen, drawMap, openSheet, region, regAt, RW, REG, ANIMALS, FOG, uncover, fogAt, fogPct, persist, parts, zoneAt, ridgeT, WT, WH, RNG, CX, CY, rimD, gateOK, gateMax, lockAt, raceOpen, RIVALS, rivalAt, carStats, WAYS, site, get audio() { return { state: actx && actx.state, engine: !!eng, gear: eng ? eng.gear : -1 }; }, step(n, dt = 1 / 60) { for (let i = 0; i < n && st === 'play'; i++) update(dt); }, get hb() { return joy.hard; }, get st() { return st; } }; // a handle for testing from the console
 new ResizeObserver(resize).observe(cv); // after layout, before paint: the picture is never shown stretched
 
 // ---------- loading ----------
